@@ -19,7 +19,7 @@ curl -fsSL https://raw.githubusercontent.com/WeGetFunded-com/wgf-support-tool/ma
 **Windows (PowerShell) :**
 
 ```powershell
-irm https://raw.githubusercontent.com/WeGetFunded-com/wgf-support-tool/main/scripts/install.ps1 | iex
+irm -UseBasicParsing https://raw.githubusercontent.com/WeGetFunded-com/wgf-support-tool/main/scripts/install.ps1 | iex
 ```
 
 Le script installe automatiquement tout ce qui est necessaire (Node.js, kubectl, l'outil).

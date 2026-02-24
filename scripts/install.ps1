@@ -43,7 +43,7 @@ if (Test-NodeVersion) {
     } catch {
         Write-Info "winget indisponible, telechargement direct..."
         $NodeInstaller = "$env:TEMP\node-install.msi"
-        Invoke-WebRequest -Uri "https://nodejs.org/dist/v22.15.0/node-v22.15.0-x64.msi" -OutFile $NodeInstaller
+        Invoke-WebRequest -UseBasicParsing -Uri "https://nodejs.org/dist/v22.15.0/node-v22.15.0-x64.msi" -OutFile $NodeInstaller
         Start-Process msiexec.exe -ArgumentList "/i `"$NodeInstaller`" /quiet /norestart" -Wait
         Remove-Item $NodeInstaller -Force
         $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
@@ -68,7 +68,7 @@ if (Get-Command kubectl -ErrorAction SilentlyContinue) {
         $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
     } catch {
         $KubectlUrl = "https://dl.k8s.io/release/v1.32.0/bin/windows/amd64/kubectl.exe"
-        Invoke-WebRequest -Uri $KubectlUrl -OutFile "$InstallDir\kubectl.exe"
+        Invoke-WebRequest -UseBasicParsing -Uri $KubectlUrl -OutFile "$InstallDir\kubectl.exe"
     }
 
     if ((Get-Command kubectl -ErrorAction SilentlyContinue) -or (Test-Path "$InstallDir\kubectl.exe")) {
@@ -81,7 +81,7 @@ if (Get-Command kubectl -ErrorAction SilentlyContinue) {
 # -- 3. Telecharger l'outil --
 Write-Info "Telechargement de WGF Support Shell..."
 New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
-Invoke-WebRequest -Uri $DownloadUrl -OutFile $BinFile
+Invoke-WebRequest -UseBasicParsing -Uri $DownloadUrl -OutFile $BinFile
 
 Write-Ok "Outil telecharge"
 
