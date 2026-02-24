@@ -66,10 +66,9 @@ export async function openTunnel(
     envConfig.namespace,
   ];
 
-  const isWindows = process.platform === "win32";
   const child: ChildProcess = spawn("kubectl", args, {
     stdio: ["ignore", "pipe", "pipe"],
-    shell: isWindows,
+    windowsHide: true,
   });
 
   let stderr = "";
