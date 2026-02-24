@@ -1,25 +1,42 @@
 import mysql from "mysql2/promise";
 import { type Config, type Environment, getEnvConfig } from "./config.js";
-import { openTunnel } from "./tunnel.js";
+import { openTunnel, type Tunnel } from "./tunnel.js";
 import * as ui from "./ui.js";
 
-export async function testConnection(
+export interface DatabaseSession {
+  connection: mysql.Connection;
+  env: Environment;
+  operator: string;
+  close(): Promise<void>;
+}
+
+const AUDIT_LOG_DDL = `
+CREATE TABLE IF NOT EXISTS admin_audit_log (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  action_type VARCHAR(64) NOT NULL,
+  target_table VARCHAR(64) NOT NULL,
+  target_uuid BINARY(16) NULL,
+  details JSON NULL,
+  operator VARCHAR(128) NOT NULL,
+  environment VARCHAR(16) NOT NULL,
+  executed_at DATETIME DEFAULT NOW()
+)`;
+
+export async function createSession(
   config: Config,
-  env: Environment
-): Promise<boolean> {
+  env: Environment,
+  operator: string
+): Promise<DatabaseSession> {
   const envConfig = getEnvConfig(config, env);
   const label = env === "staging" ? "Staging" : "Production";
 
-  let tunnel: { localPort: number; close: () => void } | null = null;
+  let tunnel: Tunnel | null = null;
   let connection: mysql.Connection | null = null;
 
   try {
     tunnel = await openTunnel(config, env);
 
-    ui.info(`Connexion MySQL à ${label}...`);
-    ui.info(`  User : ${envConfig.user}`);
-    ui.info(`  Base : ${envConfig.database}`);
-    console.log("");
+    ui.info(`Connexion MySQL a ${label}...`);
 
     connection = await mysql.createConnection({
       host: "127.0.0.1",
@@ -32,51 +49,46 @@ export async function testConnection(
     });
 
     await connection.execute("SELECT 1");
+    ui.success(`Connecte a ${label} !`);
 
-    const [rows] = await connection.execute(
-      "SELECT COUNT(*) as total FROM information_schema.tables WHERE table_schema = ?",
-      [envConfig.database]
-    );
-    const tableCount = (rows as Array<{ total: number }>)[0].total;
+    // Auto-create audit log table
+    await connection.execute(AUDIT_LOG_DDL);
 
-    ui.success(`Connecté à ${label} avec succès !`);
-    ui.info(`${tableCount} tables trouvées dans la base "${envConfig.database}".`);
+    const tunnelRef = tunnel;
+    const connRef = connection;
 
-    return true;
+    return {
+      connection: connRef,
+      env,
+      operator,
+      async close() {
+        await connRef.end().catch(() => {});
+        tunnelRef.close();
+        ui.info("Session fermee.");
+      },
+    };
   } catch (err: unknown) {
-    const error = err as { code?: string; message?: string };
+    if (connection) await connection.end().catch(() => {});
+    if (tunnel) tunnel.close();
 
+    const error = err as { code?: string; message?: string };
     switch (error.code) {
       case "ECONNREFUSED":
-        ui.error(
-          "Impossible de joindre le serveur via le tunnel."
-        );
+        ui.error("Impossible de joindre le serveur via le tunnel.");
         break;
       case "ETIMEDOUT":
       case "ECONNRESET":
-        ui.error(
-          "Le serveur ne répond pas (timeout). Réessayez."
-        );
+        ui.error("Le serveur ne repond pas (timeout).");
         break;
       case "ER_ACCESS_DENIED_ERROR":
-        ui.error(
-          "Identifiants incorrects. Verifiez le fichier .env."
-        );
+        ui.error("Identifiants incorrects. Verifiez le fichier .env.");
         break;
       case "ER_BAD_DB_ERROR":
-        ui.error(`La base "${envConfig.database}" n'existe pas sur ce serveur.`);
+        ui.error(`La base "${envConfig.database}" n'existe pas.`);
         break;
       default:
         ui.error(error.message || "Erreur inconnue");
     }
-
-    return false;
-  } finally {
-    if (connection) {
-      await connection.end().catch(() => {});
-    }
-    if (tunnel) {
-      tunnel.close();
-    }
+    throw err;
   }
 }

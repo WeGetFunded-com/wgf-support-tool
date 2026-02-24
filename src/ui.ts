@@ -58,6 +58,20 @@ export function separator(): void {
   console.log(chalk.gray("  " + ICO.line));
 }
 
+export function sectionHeader(title: string): void {
+  console.log("");
+  console.log(p(`  ── ${title} ──`));
+  console.log("");
+}
+
+export function actionWarning(description: string): void {
+  const y = chalk.yellow.bold;
+  const d = chalk.yellow;
+  console.log("");
+  console.log(y("  /!\\ ") + d(description));
+  console.log("");
+}
+
 export function productionWarning(): void {
   const r = chalk.red.bold;
   const y = chalk.yellow.bold;

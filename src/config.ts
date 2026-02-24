@@ -27,6 +27,7 @@ export interface Config {
     user: string;
     password: string;
   };
+  openRouterApiKey?: string;
 }
 
 export type Environment = "staging" | "production";
@@ -69,6 +70,7 @@ export function loadConfig(): Config {
   return {
     kubeServer: parsed["KUBE_SERVER"],
     kubeToken: parsed["KUBE_TOKEN"],
+    openRouterApiKey: parsed["OPENROUTER_API_KEY"] || undefined,
     staging: {
       namespace: parsed["STAGING_NAMESPACE"],
       podName: parsed["STAGING_POD_NAME"],
