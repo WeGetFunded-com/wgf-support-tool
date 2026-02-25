@@ -46,7 +46,7 @@ export async function createTradingAccount(
   }
 
   // 3. Select challenge
-  const challenges = await challengeQ.getPublishedChallenges(conn);
+  const challenges = await challengeQ.getPublishedAndFundedChallenges(conn);
   if (challenges.length === 0) {
     ui.error("Aucun challenge publie disponible.");
     return;

@@ -61,6 +61,7 @@ export function formatBoolean(value: number | null | undefined): string {
 }
 
 export function formatChallengeName(name: string): string {
+  if (name.startsWith("Funded")) return name.trim();
   return name.replace(/\bStandard\b/gi, "2 Steps").replace(/\bUnlimited\b/gi, "1 Step");
 }
 

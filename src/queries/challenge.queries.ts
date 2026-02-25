@@ -15,6 +15,15 @@ export async function getPublishedChallenges(conn: Conn): Promise<DbChallenge[]>
   return rows as DbChallenge[];
 }
 
+export async function getPublishedAndFundedChallenges(conn: Conn): Promise<DbChallenge[]> {
+  const [rows] = await conn.execute(
+    `SELECT ${CHALLENGE_COLS} FROM challenge
+     WHERE published = 1 OR type IN ('funded_standard', 'funded_unlimited')
+     ORDER BY type, price`
+  );
+  return rows as DbChallenge[];
+}
+
 export async function getAllChallenges(conn: Conn): Promise<DbChallenge[]> {
   const [rows] = await conn.execute(
     `SELECT ${CHALLENGE_COLS} FROM challenge ORDER BY type, price`

@@ -250,6 +250,8 @@ export const INITIAL_PHASE: Record<string, number> = {
   standard: PHASE.STANDARD_ONE,
   unlimited: PHASE.UNLIMITED,
   instant_funded: PHASE.UNLIMITED,
+  funded_standard: PHASE.FUNDED_STANDARD,
+  funded_unlimited: PHASE.FUNDED_UNLIMITED,
 };
 
 // ── Deactivation reasons (from Go backend) ──
