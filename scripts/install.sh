@@ -166,6 +166,9 @@ if command -v fnm >/dev/null 2>&1; then
   fi
 fi
 
+# Charger le RC pour que node/wgf-support soient disponibles immediatement
+. "$RC_FILE"
+
 echo ""
 echo "  ─────────────────────────────────"
 success "Installation terminee !"
