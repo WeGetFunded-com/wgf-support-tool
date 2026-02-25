@@ -176,5 +176,13 @@ echo ""
 info "Dossier : $INSTALL_DIR"
 info "Placez le fichier .env fourni par votre admin dans ce dossier."
 echo ""
-warn "Redemarrez votre terminal, puis lancez : wgf-support"
-echo ""
+
+# Lancer l'outil directement si le .env est deja present
+if [ -f "$INSTALL_DIR/.env" ]; then
+  info "Lancement de WGF Support Shell..."
+  echo ""
+  exec wgf-support
+else
+  warn "Placez le .env puis lancez : wgf-support"
+  echo ""
+fi
