@@ -41,7 +41,7 @@ export async function auditMenu(session: DatabaseSession, config: Config): Promi
     try {
       switch (choice) {
         case "user_report":
-          await userReport(session);
+          await userReport(session, config);
           break;
         case "ta_report":
           await tradingAccountReport(session);

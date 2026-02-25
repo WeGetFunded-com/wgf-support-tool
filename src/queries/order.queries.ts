@@ -11,6 +11,7 @@ export interface OrderWithDetails extends DbOrder {
   payment_date?: Date;
   challenge_name?: string;
   challenge_type?: string;
+  challenge_initial_coins_amount?: number;
 }
 
 export async function getOrdersByUser(conn: Conn, userUuid: string): Promise<OrderWithDetails[]> {
@@ -30,7 +31,8 @@ export async function getOrdersByUser(conn: Conn, userUuid: string): Promise<Ord
        p.currency as payment_currency,
        p.payment_date,
        c.name as challenge_name,
-       c.type as challenge_type
+       c.type as challenge_type,
+       c.initial_coins_amount as challenge_initial_coins_amount
      FROM orders o
      LEFT JOIN payment p ON o.payment_uuid = p.payment_uuid
      LEFT JOIN challenge c ON o.challenge_uuid = c.challenge_uuid
