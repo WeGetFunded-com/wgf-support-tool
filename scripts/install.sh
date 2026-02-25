@@ -154,6 +154,16 @@ if ! grep -qF ".wgf-support-tool" "$RC_FILE" 2>/dev/null; then
   warn "PATH mis a jour dans $RC_FILE"
 fi
 
+# Si fnm a ete installe, ajouter l'init fnm au shell RC
+if command -v fnm >/dev/null 2>&1; then
+  if ! grep -qF "fnm env" "$RC_FILE" 2>/dev/null; then
+    echo "" >> "$RC_FILE"
+    echo "# fnm (Node.js version manager)" >> "$RC_FILE"
+    echo 'eval "$(fnm env)"' >> "$RC_FILE"
+    warn "fnm env ajoute dans $RC_FILE"
+  fi
+fi
+
 echo ""
 echo "  ─────────────────────────────────"
 success "Installation terminee !"
