@@ -145,6 +145,8 @@ case "$SHELL_NAME" in
   *)    RC_FILE="$HOME/.profile" ;;
 esac
 
+touch "$RC_FILE"
+
 PATH_LINE="export PATH=\"\$HOME/.wgf-support-tool:\$PATH\""
 
 if ! grep -qF ".wgf-support-tool" "$RC_FILE" 2>/dev/null; then
