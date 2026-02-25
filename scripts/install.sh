@@ -69,7 +69,7 @@ else
   export PATH="$FNM_DIR:$PATH"
 
   if command -v fnm >/dev/null 2>&1; then
-    fnm install --lts
+    fnm install "$NODE_MIN_VERSION"
     eval "$(fnm env)"
   else
     fail "Echec. Installez Node.js manuellement : https://nodejs.org"
