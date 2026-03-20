@@ -3,6 +3,7 @@ import type { DatabaseSession } from "../db.js";
 import * as taQ from "../queries/trading-account.queries.js";
 import * as challengeQ from "../queries/challenge.queries.js";
 import * as auditLogQ from "../queries/audit-log.queries.js";
+import * as baQ from "../queries/broker-account.queries.js";
 import { REASONS } from "../types.js";
 import * as ui from "../ui.js";
 import { searchTradingAccountPrompt, confirmProductionAction } from "../utils/prompts.js";
@@ -15,12 +16,14 @@ export async function fixProfitTarget(session: DatabaseSession): Promise<void> {
   const account = await searchTradingAccountPrompt(conn);
   if (!account) return;
 
+  const accountDisplay = await baQ.getAccountDisplayId(conn, account);
+
   // Show current state
   const rules = await challengeQ.getChallengeRules(conn, account.challenge_uuid, account.challenge_phase);
 
   ui.sectionHeader("Etat actuel");
   renderKeyValue({
-    "cTrader ID": String(account.ctrader_trading_account),
+    "Compte": accountDisplay.label,
     "Phase": String(account.challenge_phase),
     "Profit Target actuel": formatPercent(account.current_profit_target_percent),
     "Valeur de reference (rules)": rules ? formatPercent(rules.profit_target_percent) : "N/A",
@@ -38,7 +41,7 @@ export async function fixProfitTarget(session: DatabaseSession): Promise<void> {
   const newValue = parseFloat(newValueStr);
 
   const description =
-    `Modifier profit target du compte cTrader ${account.ctrader_trading_account} : ` +
+    `Modifier profit target du compte ${accountDisplay.label} : ` +
     `${formatPercent(account.current_profit_target_percent)} → ${formatPercent(newValue)}`;
 
   const confirmed = await confirmProductionAction(env, description);
@@ -57,7 +60,8 @@ export async function fixProfitTarget(session: DatabaseSession): Promise<void> {
     );
 
     await auditLogQ.insertAuditLog(conn, "FIX_PROFIT_TARGET", "trading_account", account.trading_account_uuid, {
-      ctrader_id: account.ctrader_trading_account,
+      broker_name: accountDisplay.brokerName,
+      account_login: accountDisplay.login,
       old_value: account.current_profit_target_percent,
       new_value: newValue,
     }, operator, env);

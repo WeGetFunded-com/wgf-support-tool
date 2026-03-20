@@ -6,6 +6,7 @@ import * as challengeQ from "../queries/challenge.queries.js";
 import * as tradeHistoryQ from "../queries/trade-history.queries.js";
 import * as auditLogQ from "../queries/audit-log.queries.js";
 import * as userQ from "../queries/user.queries.js";
+import * as baQ from "../queries/broker-account.queries.js";
 import * as ui from "../ui.js";
 import { searchTradingAccountPrompt, confirmProductionAction } from "../utils/prompts.js";
 import { renderKeyValue, renderTable } from "../utils/table.js";
@@ -30,6 +31,8 @@ export async function verifyDeactivation(
     ui.warn("Ce compte n'est pas desactive (success != 0).");
     return;
   }
+
+  const accountDisplay = await baQ.getAccountDisplayId(conn, account);
 
   // 3. Collect all raw data
   const challenge = await challengeQ.getChallengeByUuid(conn, account.challenge_uuid);
@@ -56,13 +59,13 @@ export async function verifyDeactivation(
   }
 
   // 4. Display formatted raw data
-  ui.sectionHeader(`Analyse de desactivation : cTrader ${account.ctrader_trading_account}`);
+  ui.sectionHeader(`Analyse de desactivation : ${accountDisplay.label}`);
 
   // Account info
   ui.sectionHeader("Informations du compte");
   renderKeyValue({
     "UUID": account.trading_account_uuid,
-    "cTrader ID": String(account.ctrader_trading_account),
+    "Compte": accountDisplay.label,
     "Serveur": formatServer(account.ctrader_server),
     "Phase": formatPhase(account.challenge_phase, challenge?.type),
     "Statut": formatSuccess(account.success),
@@ -267,7 +270,7 @@ export async function verifyDeactivation(
   if (postAction === "back") return;
 
   // Reactivation flow
-  const description = `Reactiver le compte cTrader ${account.ctrader_trading_account} (raison originale: ${account.reason || "N/A"})`;
+  const description = `Reactiver le compte ${accountDisplay.label} (raison originale: ${account.reason || "N/A"})`;
   const confirmed = await confirmProductionAction(env, description);
   if (!confirmed) {
     ui.info("Action annulee.");
@@ -284,7 +287,8 @@ export async function verifyDeactivation(
       "trading_account",
       account.trading_account_uuid,
       {
-        ctrader_id: account.ctrader_trading_account,
+        broker_name: accountDisplay.brokerName,
+        account_login: accountDisplay.login,
         previous_reason: account.reason,
         previous_success: account.success,
         source: "verify_deactivation",
@@ -294,7 +298,7 @@ export async function verifyDeactivation(
     );
 
     await conn.commit();
-    ui.success(`Compte cTrader ${account.ctrader_trading_account} reactive !`);
+    ui.success(`Compte ${accountDisplay.label} reactive !`);
   } catch (err) {
     await conn.rollback();
     throw err;

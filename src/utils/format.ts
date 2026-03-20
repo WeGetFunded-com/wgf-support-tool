@@ -1,4 +1,4 @@
-import type { ChallengeType } from "../types.js";
+import type { ChallengeType, BrokerName } from "../types.js";
 
 export function formatPercent(value: number | string | null | undefined): string {
   if (value == null) return "N/A";
@@ -63,6 +63,10 @@ export function formatBoolean(value: number | null | undefined): string {
 export function formatChallengeName(name: string): string {
   if (name.startsWith("Funded")) return name.trim();
   return name.replace(/\bStandard\b/gi, "2 Steps").replace(/\bUnlimited\b/gi, "1 Step");
+}
+
+export function formatBrokerName(name: BrokerName): string {
+  return name === "mt5" ? "MT5" : "cTrader";
 }
 
 export function truncate(str: string, maxLen: number): string {

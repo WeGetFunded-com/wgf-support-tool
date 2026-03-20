@@ -3,6 +3,7 @@ import type mysql from "mysql2/promise";
 import type { DbUser, DbTradingAccount } from "../types.js";
 import * as userQ from "../queries/user.queries.js";
 import * as taQ from "../queries/trading-account.queries.js";
+import * as baQ from "../queries/broker-account.queries.js";
 import * as ui from "../ui.js";
 import { isValidUuid } from "./uuid.js";
 import { renderTable } from "./table.js";
@@ -94,6 +95,7 @@ export async function searchTradingAccountPrompt(
     message: "Rechercher un compte de trading par :",
     choices: [
       { name: "cTrader Account ID", value: "ctrader" },
+      { name: "Login MT5", value: "mt5" },
       { name: "UUID", value: "uuid" },
     ],
   });
@@ -111,6 +113,15 @@ export async function searchTradingAccountPrompt(
         return null;
       }
       account = await taQ.getTradingAccountByCtrader(conn, ctraderId);
+      break;
+    }
+    case "mt5": {
+      const login = parseInt(query.trim(), 10);
+      if (isNaN(login)) {
+        ui.error("Login MT5 invalide (doit etre un nombre).");
+        return null;
+      }
+      account = await baQ.getTradingAccountByBrokerLogin(conn, login, "mt5");
       break;
     }
     case "uuid": {

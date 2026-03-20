@@ -36,6 +36,10 @@ export const REASONS = {
   TRADER_NOT_FOUND: "TRADER_NOT_FOUND",
 } as const;
 
+// ── Broker ──
+
+export type BrokerName = "ctrader" | "mt5";
+
 // ── DB Entities ──
 
 export interface DbUser {
@@ -225,6 +229,18 @@ export interface DbAuditLog {
   operator: string;
   environment: string;
   executed_at: Date;
+}
+
+export interface DbBrokerAccount {
+  id: string;
+  broker_name: BrokerName;
+  user_id: string;
+  trading_account_id: string;
+  client_id: number | null;
+  login: number;
+  server_type: string;
+  password: string;
+  active: number;
 }
 
 // ── Phase transition map ──

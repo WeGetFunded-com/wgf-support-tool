@@ -6,6 +6,7 @@ import * as challengeQ from "../queries/challenge.queries.js";
 import * as taQ from "../queries/trading-account.queries.js";
 import * as faQ from "../queries/funded-activation.queries.js";
 import * as auditLogQ from "../queries/audit-log.queries.js";
+import * as baQ from "../queries/broker-account.queries.js";
 import * as ui from "../ui.js";
 import { searchTradingAccountPrompt, confirmProductionAction } from "../utils/prompts.js";
 import { renderKeyValue } from "../utils/table.js";
@@ -50,7 +51,10 @@ export async function forcePhaseTransition(
     return;
   }
 
-  // 3. Determine available transition
+  // 3. Determine broker type
+  const accountDisplay = await baQ.getAccountDisplayId(conn, account);
+
+  // 4. Determine available transition
   const transitions = PHASE_TRANSITIONS[challenge.type];
   if (!transitions) {
     ui.warn(`Pas de transition disponible pour le type "${challenge.type}".`);
@@ -69,11 +73,11 @@ export async function forcePhaseTransition(
   const isFundedTransition = FUNDED_PHASES.has(transition.nextPhase);
   const isUnlimited = challenge.type === "unlimited";
 
-  // 4. Preview
+  // 5. Preview
   ui.sectionHeader("Forcer le passage de phase");
 
   renderKeyValue({
-    "cTrader ID": String(account.ctrader_trading_account),
+    "Compte": accountDisplay.label,
     "UUID du compte": account.trading_account_uuid,
     "Challenge": `${formatChallengeName(challenge.name)} (${challenge.type})`,
     "Statut actuel": formatSuccess(account.success),
@@ -111,9 +115,9 @@ export async function forcePhaseTransition(
 
   // 6. Confirm
   const description = isFundedTransition
-    ? `Forcer le passage en ${formatPhase(transition.nextPhase)} : cTrader ${account.ctrader_trading_account}` +
+    ? `Forcer le passage en ${formatPhase(transition.nextPhase)} : ${accountDisplay.label}` +
       (isUnlimited && bypassFees ? " (frais bypasses)" : "")
-    : `Forcer le passage en ${formatPhase(transition.nextPhase)} : cTrader ${account.ctrader_trading_account}`;
+    : `Forcer le passage en ${formatPhase(transition.nextPhase)} : ${accountDisplay.label}`;
 
   const confirmed = await confirmProductionAction(env, description);
   if (!confirmed) {
@@ -125,12 +129,12 @@ export async function forcePhaseTransition(
   if (isFundedTransition) {
     await executeFundedTransition(
       conn, env, operator, kubeAccess, namespace,
-      account, challenge, transition, isUnlimited, bypassFees
+      account, challenge, transition, isUnlimited, bypassFees, accountDisplay
     );
   } else {
     await executePhaseTransition(
       conn, env, operator, kubeAccess, namespace,
-      account, challenge, transition
+      account, challenge, transition, accountDisplay
     );
   }
 }
@@ -145,7 +149,8 @@ async function executePhaseTransition(
   namespace: string,
   account: any,
   challenge: any,
-  transition: { nextPhase: number; nextServer: string }
+  transition: { nextPhase: number; nextServer: string },
+  accountDisplay: baQ.AccountDisplayInfo
 ): Promise<void> {
   // Step 1: Mark current account as succeeded
   ui.sectionHeader("Etape 1 — Marquer le compte actuel comme reussi");
@@ -155,7 +160,8 @@ async function executePhaseTransition(
     await taQ.markAccountSuccess(conn, account.trading_account_uuid, REASONS.CHALLENGE_SUCCEED);
 
     await auditLogQ.insertAuditLog(conn, "FORCE_PHASE_TRANSITION", "trading_account", account.trading_account_uuid, {
-      ctrader_id: account.ctrader_trading_account,
+      broker_name: accountDisplay.brokerName,
+      account_login: accountDisplay.login,
       challenge_type: challenge.type,
       from_phase: account.challenge_phase,
       to_phase: transition.nextPhase,
@@ -181,7 +187,7 @@ async function executePhaseTransition(
     command: [
       "/bin/sh",
       "-c",
-      `RESP=$(curl -s -X POST -w '\\nHTTP_CODE:%{http_code}' "${tamUrl}/account?order_uuid=${account.order_uuid}&challenge_phase=${transition.nextPhase}"); echo "$RESP"; echo "$RESP" | grep -q 'HTTP_CODE:2' || exit 1`,
+      `RESP=$(curl -s -X POST -w '\\nHTTP_CODE:%{http_code}' "${tamUrl}/account?order_uuid=${account.order_uuid}&challenge_phase=${transition.nextPhase}&broker_name=${accountDisplay.brokerName}"); echo "$RESP"; echo "$RESP" | grep -q 'HTTP_CODE:2' || exit 1`,
     ],
   };
 
@@ -213,6 +219,13 @@ async function executePhaseTransition(
     (a) => a.challenge_phase === transition.nextPhase && a.success === null
   );
 
+  // Get display info for new account
+  let newAccountLabel = "N/A (verifier manuellement)";
+  if (newAccount) {
+    const newDisplay = await baQ.getAccountDisplayId(conn, newAccount);
+    newAccountLabel = newDisplay.label;
+  }
+
   // Recap
   console.log("");
   ui.sectionHeader("Recap");
@@ -221,8 +234,8 @@ async function executePhaseTransition(
     "Resultat": "Passage de phase reussi",
     "Phase precedente": formatPhase(account.challenge_phase, challenge.type),
     "Nouvelle phase": formatPhase(transition.nextPhase, challenge.type),
-    "cTrader ID original": String(account.ctrader_trading_account),
-    "Nouveau cTrader ID": newAccount ? String(newAccount.ctrader_trading_account) : "N/A (verifier manuellement)",
+    "Compte original": accountDisplay.label,
+    "Nouveau compte": newAccountLabel,
     "Nouveau UUID": newAccount?.trading_account_uuid ?? "N/A",
   });
 
@@ -241,7 +254,8 @@ async function executeFundedTransition(
   challenge: any,
   transition: { nextPhase: number; nextServer: string },
   isUnlimited: boolean,
-  bypassFees: boolean
+  bypassFees: boolean,
+  accountDisplay: baQ.AccountDisplayInfo
 ): Promise<void> {
   // Step 1: Call watcher simulate/funded
   ui.sectionHeader("Etape 1 — Simulation Funded (watcher)");
@@ -268,7 +282,8 @@ async function executeFundedTransition(
       console.log(simulateResult.logs);
     }
     await auditLogQ.insertAuditLog(conn, "FORCE_PHASE_TRANSITION_FAILED", "trading_account", account.trading_account_uuid, {
-      ctrader_id: account.ctrader_trading_account,
+      broker_name: accountDisplay.brokerName,
+      account_login: accountDisplay.login,
       challenge_type: challenge.type,
       target_phase: transition.nextPhase,
       error: simulateResult.failureReason || "Job failed",
@@ -337,7 +352,8 @@ async function executeFundedTransition(
 
   // Audit log
   await auditLogQ.insertAuditLog(conn, "FORCE_PHASE_TRANSITION", "trading_account", account.trading_account_uuid, {
-    ctrader_id: account.ctrader_trading_account,
+    broker_name: accountDisplay.brokerName,
+    account_login: accountDisplay.login,
     challenge_type: challenge.type,
     from_phase: account.challenge_phase,
     to_phase: transition.nextPhase,
@@ -361,7 +377,7 @@ async function executeFundedTransition(
       "Resultat": "Passage en funded reussi",
       "Phase precedente": formatPhase(account.challenge_phase, challenge.type),
       "Phase cible": formatPhase(transition.nextPhase),
-      "cTrader ID original": String(account.ctrader_trading_account),
+      "Compte original": accountDisplay.label,
       "Frais bypasses": isUnlimited ? "Oui" : "N/A (standard)",
     });
   }

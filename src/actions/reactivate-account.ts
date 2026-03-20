@@ -3,32 +3,20 @@ import type { DatabaseSession } from "../db.js";
 import * as taQ from "../queries/trading-account.queries.js";
 import * as challengeQ from "../queries/challenge.queries.js";
 import * as auditLogQ from "../queries/audit-log.queries.js";
+import * as baQ from "../queries/broker-account.queries.js";
 import { REASONS } from "../types.js";
 import * as ui from "../ui.js";
-import { confirmProductionAction } from "../utils/prompts.js";
+import { searchTradingAccountPrompt, confirmProductionAction } from "../utils/prompts.js";
 import { renderKeyValue } from "../utils/table.js";
 import { formatPhase, formatPercent, formatSuccess, formatServer } from "../utils/format.js";
 
 export async function reactivateAccount(session: DatabaseSession): Promise<void> {
   const { connection: conn, env, operator } = session;
 
-  // Search by cTrader Account ID
-  const ctraderIdStr = await input({
-    message: "cTrader Account ID du compte a reactiver :",
-    validate: (v) => {
-      const n = parseInt(v, 10);
-      if (isNaN(n) || n <= 0) return "Doit etre un entier positif";
-      return true;
-    },
-  });
+  const account = await searchTradingAccountPrompt(conn);
+  if (!account) return;
 
-  const ctraderId = parseInt(ctraderIdStr, 10);
-  const account = await taQ.getTradingAccountByCtrader(conn, ctraderId);
-
-  if (!account) {
-    ui.warn("Aucun compte trouve avec ce cTrader ID.");
-    return;
-  }
+  const accountDisplay = await baQ.getAccountDisplayId(conn, account);
 
   if (account.success === null) {
     ui.warn("Ce compte est deja actif.");
@@ -45,7 +33,7 @@ export async function reactivateAccount(session: DatabaseSession): Promise<void>
 
   ui.sectionHeader("Compte a reactiver");
   renderKeyValue({
-    "cTrader ID": String(account.ctrader_trading_account),
+    "Compte": accountDisplay.label,
     "Phase": formatPhase(account.challenge_phase),
     "Serveur": formatServer(account.ctrader_server),
     "Statut": formatSuccess(account.success),
@@ -80,7 +68,7 @@ export async function reactivateAccount(session: DatabaseSession): Promise<void>
   }
 
   const description =
-    `Reactiver le compte cTrader ${account.ctrader_trading_account}` +
+    `Reactiver le compte ${accountDisplay.label}` +
     (newProfitTarget !== undefined
       ? ` avec profit target ${formatPercent(newProfitTarget)}`
       : "");
@@ -96,7 +84,8 @@ export async function reactivateAccount(session: DatabaseSession): Promise<void>
     await taQ.reactivateAccount(conn, account.trading_account_uuid, reason, newProfitTarget);
 
     await auditLogQ.insertAuditLog(conn, "REACTIVATE_ACCOUNT", "trading_account", account.trading_account_uuid, {
-      ctrader_id: account.ctrader_trading_account,
+      broker_name: accountDisplay.brokerName,
+      account_login: accountDisplay.login,
       previous_reason: account.reason,
       previous_success: account.success,
       new_profit_target: newProfitTarget ?? account.current_profit_target_percent,
@@ -104,7 +93,7 @@ export async function reactivateAccount(session: DatabaseSession): Promise<void>
     }, operator, env);
 
     await conn.commit();
-    ui.success(`Compte cTrader ${account.ctrader_trading_account} reactive !`);
+    ui.success(`Compte ${accountDisplay.label} reactive !`);
   } catch (err) {
     await conn.rollback();
     throw err;

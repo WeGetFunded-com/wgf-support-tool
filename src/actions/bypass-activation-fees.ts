@@ -3,6 +3,7 @@ import type { Config, Environment } from "../config.js";
 import * as challengeQ from "../queries/challenge.queries.js";
 import * as faQ from "../queries/funded-activation.queries.js";
 import * as auditLogQ from "../queries/audit-log.queries.js";
+import * as baQ from "../queries/broker-account.queries.js";
 import * as ui from "../ui.js";
 import { searchTradingAccountPrompt, confirmProductionAction } from "../utils/prompts.js";
 import { renderKeyValue } from "../utils/table.js";
@@ -27,6 +28,8 @@ export async function bypassActivationFees(
   const account = await searchTradingAccountPrompt(conn);
   if (!account) return;
 
+  const accountDisplay = await baQ.getAccountDisplayId(conn, account);
+
   // 2. Load challenge for display
   const challenge = await challengeQ.getChallengeByUuid(conn, account.challenge_uuid);
 
@@ -49,7 +52,7 @@ export async function bypassActivationFees(
   ui.sectionHeader("Bypass des frais d'activation");
 
   renderKeyValue({
-    "cTrader ID": String(account.ctrader_trading_account),
+    "Compte": accountDisplay.label,
     "UUID du compte": account.trading_account_uuid,
     "Challenge": challenge
       ? `${formatChallengeName(challenge.name)} (${challenge.type})`
@@ -68,7 +71,7 @@ export async function bypassActivationFees(
   // 5. Confirm
   const description =
     `Bypass des frais d'activation : ${formatCurrency(activation.amount, activation.currency)} ` +
-    `pour le compte cTrader ${account.ctrader_trading_account}`;
+    `pour le compte ${accountDisplay.label}`;
 
   const confirmed = await confirmProductionAction(env, description);
   if (!confirmed) {
@@ -113,7 +116,8 @@ export async function bypassActivationFees(
   // 7. Audit log
   await auditLogQ.insertAuditLog(conn, "BYPASS_ACTIVATION_FEES", "funded_activation", activation.activation_uuid, {
     trading_account_uuid: account.trading_account_uuid,
-    ctrader_id: account.ctrader_trading_account,
+    broker_name: accountDisplay.brokerName,
+    account_login: accountDisplay.login,
     original_amount: activation.amount,
     currency: activation.currency,
     process_job_success: result.success,
@@ -129,7 +133,7 @@ export async function bypassActivationFees(
       : "Traitement echoue — verifier manuellement",
     "Activation UUID": activation.activation_uuid,
     "Montant bypasse": formatCurrency(activation.amount, activation.currency),
-    "cTrader ID": String(account.ctrader_trading_account),
+    "Compte": accountDisplay.label,
   });
 
   ui.success("Action terminee.");

@@ -6,11 +6,12 @@ import * as orderQ from "../queries/order.queries.js";
 import * as taQ from "../queries/trading-account.queries.js";
 import * as optionsQ from "../queries/options.queries.js";
 import * as auditLogQ from "../queries/audit-log.queries.js";
-import { INITIAL_PHASE, type ChallengeType } from "../types.js";
+import * as baQ from "../queries/broker-account.queries.js";
+import { INITIAL_PHASE, type ChallengeType, type BrokerName } from "../types.js";
 import * as ui from "../ui.js";
 import { searchUserPrompt, confirmProductionAction } from "../utils/prompts.js";
 import { renderKeyValue } from "../utils/table.js";
-import { formatPercent, formatCurrency, formatPhase, formatDuration, formatChallengeName } from "../utils/format.js";
+import { formatPercent, formatCurrency, formatPhase, formatDuration, formatChallengeName, formatBrokerName } from "../utils/format.js";
 import { generateUuid } from "../utils/uuid.js";
 import { runJob, getKubeAccess, generateJobName } from "../kube/index.js";
 import type { KubeJobSpec } from "../kube/index.js";
@@ -35,8 +36,17 @@ export async function createTradingAccount(
 
   ui.info(`Utilisateur : ${user.firstname} ${user.lastname} (${user.email})`);
 
-  // 2. Validate CTID
-  if (!user.CTID) {
+  // 2. Select trading platform
+  const brokerName = await select<BrokerName>({
+    message: "Plateforme de trading :",
+    choices: [
+      { name: "cTrader", value: "ctrader" },
+      { name: "MT5", value: "mt5" },
+    ],
+  });
+
+  // 3. Validate CTID (cTrader only)
+  if (brokerName === "ctrader" && !user.CTID) {
     ui.error(
       "L'utilisateur n'a pas de CTID (cTrader ID). " +
       "Le CTID est necessaire pour que le TAM puisse lier le compte cTrader. " +
@@ -45,7 +55,7 @@ export async function createTradingAccount(
     return;
   }
 
-  // 3. Select challenge
+  // 4. Select challenge
   const challenges = await challengeQ.getPublishedAndFundedChallenges(conn);
   if (challenges.length === 0) {
     ui.error("Aucun challenge publie disponible.");
@@ -61,7 +71,7 @@ export async function createTradingAccount(
   });
   const challenge = challenges[challengeIdx];
 
-  // 4. Select options
+  // 5. Select options
   const allOptions = await optionsQ.getAllOptions(conn);
   let selectedOptions: string[] = [];
 
@@ -75,13 +85,13 @@ export async function createTradingAccount(
     });
   }
 
-  // 5. Determine initial phase
+  // 6. Determine initial phase
   const initialPhase = INITIAL_PHASE[challenge.type as ChallengeType] ?? 1;
 
   // For instant_funded, rules are at phase 3 but challenge_phase in DB is 0
   const rulesPhase = challenge.type === "instant_funded" ? 3 : initialPhase;
 
-  // 6. Get challenge rules
+  // 7. Get challenge rules
   const allRules = await challengeQ.getAllChallengeRules(conn, challenge.challenge_uuid);
   const currentPhaseRules = allRules.find((r) => r.phase === rulesPhase);
 
@@ -103,29 +113,33 @@ export async function createTradingAccount(
   }
   const challengeConfiguration = JSON.stringify(configObj);
 
-  // 7. Preview
+  // 8. Preview
   ui.sectionHeader("Preview de la creation");
 
   const selectedOptionNames = allOptions
     .filter((o) => selectedOptions.includes(o.option_uuid))
     .map((o) => o.name);
 
-  renderKeyValue({
-    "Utilisateur": `${user.firstname} ${user.lastname} (${user.email})`,
-    "CTID": String(user.CTID),
-    "Challenge": `${formatChallengeName(challenge.name)} (${challenge.type})`,
-    "Prix": formatCurrency(challenge.price),
-    "Balance initiale": formatCurrency(challenge.initial_coins_amount),
-    "Phase initiale": formatPhase(initialPhase, challenge.type),
-    "Profit Target": formatPercent(currentPhaseRules.profit_target_percent),
-    "Duree phase": formatDuration(currentPhaseRules.phase_duration),
-    "Options": selectedOptionNames.length > 0 ? selectedOptionNames.join(", ") : "Aucune",
-    "Methode paiement": "admin_manual",
-    "Compte cTrader": "Sera cree automatiquement par le TAM",
-  });
+  const previewFields: Record<string, string> = {};
+  previewFields["Utilisateur"] = `${user.firstname} ${user.lastname} (${user.email})`;
+  previewFields["Plateforme"] = formatBrokerName(brokerName);
+  if (brokerName === "ctrader") {
+    previewFields["CTID"] = String(user.CTID);
+  }
+  previewFields["Challenge"] = `${formatChallengeName(challenge.name)} (${challenge.type})`;
+  previewFields["Prix"] = formatCurrency(challenge.price);
+  previewFields["Balance initiale"] = formatCurrency(challenge.initial_coins_amount);
+  previewFields["Phase initiale"] = formatPhase(initialPhase, challenge.type);
+  previewFields["Profit Target"] = formatPercent(currentPhaseRules.profit_target_percent);
+  previewFields["Duree phase"] = formatDuration(currentPhaseRules.phase_duration);
+  previewFields["Options"] = selectedOptionNames.length > 0 ? selectedOptionNames.join(", ") : "Aucune";
+  previewFields["Methode paiement"] = "admin_manual";
+  previewFields["Compte"] = `Sera cree automatiquement par le TAM (${formatBrokerName(brokerName)})`;
+
+  renderKeyValue(previewFields);
 
   const description =
-    `Creer le compte de trading "${formatChallengeName(challenge.name)}" pour ${user.email} ` +
+    `Creer le compte ${formatBrokerName(brokerName)} "${formatChallengeName(challenge.name)}" pour ${user.email} ` +
     `(balance: ${formatCurrency(challenge.initial_coins_amount)})`;
 
   const confirmed = await confirmProductionAction(env, description);
@@ -134,11 +148,11 @@ export async function createTradingAccount(
     return;
   }
 
-  // 8. Generate UUIDs
+  // 9. Generate UUIDs
   const paymentUuid = generateUuid();
   const orderUuid = generateUuid();
 
-  // 9. Insert order + payment in DB (TAM needs the order to exist)
+  // 10. Insert order + payment in DB (TAM needs the order to exist)
   await conn.beginTransaction();
   try {
     await orderQ.createPayment(conn, paymentUuid, "admin_manual", 0, "EUR", "admin_manual");
@@ -165,7 +179,7 @@ export async function createTradingAccount(
   ui.success("Order cree en DB.");
   ui.info(`  Order UUID : ${orderUuid}`);
 
-  // 10. K8s Job: call TAM to create cTrader account + trading account + trade history + email
+  // 11. K8s Job: call TAM to create trading account + trade history + email
   const tamUrl = getTamServiceUrl(env);
   const tamSpec: KubeJobSpec = {
     name: generateJobName("support-create-ta"),
@@ -174,7 +188,7 @@ export async function createTradingAccount(
     command: [
       "/bin/sh",
       "-c",
-      `RESP=$(curl -s -X POST -w '\\nHTTP_CODE:%{http_code}' "${tamUrl}/account?order_uuid=${orderUuid}&challenge_phase=${initialPhase}"); echo "$RESP"; echo "$RESP" | grep -q 'HTTP_CODE:2' || exit 1`,
+      `RESP=$(curl -s -X POST -w '\\nHTTP_CODE:%{http_code}' "${tamUrl}/account?order_uuid=${orderUuid}&challenge_phase=${initialPhase}&broker_name=${brokerName}"); echo "$RESP"; echo "$RESP" | grep -q 'HTTP_CODE:2' || exit 1`,
     ],
   };
 
@@ -209,16 +223,24 @@ export async function createTradingAccount(
     console.log(result.logs);
   }
 
-  // 11. Query DB to get the created trading account (with cTrader ID)
+  // 12. Query DB to get the created trading account
   const accounts = await taQ.getAllTradingAccountsByOrder(conn, orderUuid);
   const createdAccount = accounts[0];
 
-  // 12. Audit log
+  // Get broker account info for MT5 accounts
+  let accountLogin: string = "N/A";
+  if (createdAccount) {
+    const displayInfo = await baQ.getAccountDisplayId(conn, createdAccount);
+    accountLogin = String(displayInfo.login);
+  }
+
+  // 13. Audit log
   await auditLogQ.insertAuditLog(conn, "CREATE_TRADING_ACCOUNT", "trading_account",
     createdAccount?.trading_account_uuid ?? null, {
     user_email: user.email,
     user_uuid: user.user_uuid,
     user_ctid: user.CTID,
+    broker_name: brokerName,
     challenge_name: challenge.name,
     challenge_type: challenge.type,
     challenge_uuid: challenge.challenge_uuid,
@@ -227,25 +249,35 @@ export async function createTradingAccount(
     initial_phase: initialPhase,
     initial_balance: challenge.initial_coins_amount,
     options: selectedOptionNames,
-    ctrader_id: createdAccount?.ctrader_trading_account ?? "unknown",
+    account_login: accountLogin,
     tam_job_duration: result.durationSeconds,
   }, operator, env);
 
-  // 13. Recap
+  // 14. Recap
   console.log("");
   ui.sectionHeader("Recap");
 
-  renderKeyValue({
+  const recapFields: Record<string, string> = {
     "Resultat": "Compte de trading cree avec succes",
+    "Plateforme": formatBrokerName(brokerName),
     "Utilisateur": `${user.firstname} ${user.lastname} (${user.email})`,
     "Challenge": `${formatChallengeName(challenge.name)} (${challenge.type})`,
     "Phase": formatPhase(initialPhase, challenge.type),
     "Balance": formatCurrency(challenge.initial_coins_amount),
     "Order UUID": orderUuid,
     "Trading Account UUID": createdAccount?.trading_account_uuid ?? "N/A",
-    "cTrader ID": createdAccount ? String(createdAccount.ctrader_trading_account) : "N/A (verifier manuellement)",
-    "Options": selectedOptionNames.length > 0 ? selectedOptionNames.join(", ") : "Aucune",
-  });
+  };
+
+  if (brokerName === "mt5") {
+    recapFields["MT5 Login"] = accountLogin;
+    recapFields["Info"] = "Les identifiants MT5 ont ete envoyes par email";
+  } else {
+    recapFields["cTrader ID"] = createdAccount ? String(createdAccount.ctrader_trading_account) : "N/A (verifier manuellement)";
+  }
+
+  recapFields["Options"] = selectedOptionNames.length > 0 ? selectedOptionNames.join(", ") : "Aucune";
+
+  renderKeyValue(recapFields);
 
   ui.success("Action terminee.");
 }

@@ -48,7 +48,7 @@ export async function actionsMenu(session: DatabaseSession, config: Config): Pro
         { name: "Reactiver un compte", value: "reactivate_account" },
         { name: "Creer un code promo", value: "create_promo" },
         { name: "Gerer les options d'un compte", value: "manage_options" },
-        { name: "Mettre a jour le cTrader ID", value: "update_ctrader_id" },
+        { name: "Mettre a jour l'identifiant broker (cTrader/MT5)", value: "update_ctrader_id" },
         { name: "Verification de la desactivation d'un compte", value: "verify_deactivation" },
         { name: "Retour", value: "back" },
       ],

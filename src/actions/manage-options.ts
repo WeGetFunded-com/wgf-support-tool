@@ -2,7 +2,9 @@ import { select } from "@inquirer/prompts";
 import type { DatabaseSession } from "../db.js";
 import * as taQ from "../queries/trading-account.queries.js";
 import * as optionsQ from "../queries/options.queries.js";
+import * as orderQ from "../queries/order.queries.js";
 import * as auditLogQ from "../queries/audit-log.queries.js";
+import * as baQ from "../queries/broker-account.queries.js";
 import * as ui from "../ui.js";
 import { searchTradingAccountPrompt, confirmProductionAction } from "../utils/prompts.js";
 import { renderTable } from "../utils/table.js";
@@ -14,11 +16,13 @@ export async function manageOptions(session: DatabaseSession): Promise<void> {
   const account = await searchTradingAccountPrompt(conn);
   if (!account) return;
 
+  const accountDisplay = await baQ.getAccountDisplayId(conn, account);
+
   // Get current options on the account
   const currentOptions = await taQ.getTradingAccountOptions(conn, account.trading_account_uuid);
   const allOptions = await optionsQ.getAllOptions(conn);
 
-  ui.sectionHeader(`Options du compte cTrader ${account.ctrader_trading_account}`);
+  ui.sectionHeader(`Options du compte ${accountDisplay.label}`);
 
   if (currentOptions.length > 0) {
     renderTable(
@@ -59,7 +63,7 @@ export async function manageOptions(session: DatabaseSession): Promise<void> {
 
     const option = available[optionIdx];
 
-    const description = `Ajouter l'option "${option.name}" au compte cTrader ${account.ctrader_trading_account}`;
+    const description = `Ajouter l'option "${option.name}" au compte ${accountDisplay.label}`;
     const confirmed = await confirmProductionAction(env, description);
     if (!confirmed) {
       ui.info("Action annulee.");
@@ -69,9 +73,11 @@ export async function manageOptions(session: DatabaseSession): Promise<void> {
     await conn.beginTransaction();
     try {
       await taQ.addTradingAccountOption(conn, account.trading_account_uuid, option.option_uuid);
+      await orderQ.createOrderOption(conn, account.order_uuid, option.option_uuid);
 
       await auditLogQ.insertAuditLog(conn, "ADD_OPTION", "trading_account_options", account.trading_account_uuid, {
-        ctrader_id: account.ctrader_trading_account,
+        broker_name: accountDisplay.brokerName,
+        account_login: accountDisplay.login,
         option_name: option.name,
         option_uuid: option.option_uuid,
       }, operator, env);
@@ -100,7 +106,7 @@ export async function manageOptions(session: DatabaseSession): Promise<void> {
 
     const option = currentOptions[optionIdx];
 
-    const description = `Retirer l'option "${option.name}" du compte cTrader ${account.ctrader_trading_account}`;
+    const description = `Retirer l'option "${option.name}" du compte ${accountDisplay.label}`;
     const confirmed = await confirmProductionAction(env, description);
     if (!confirmed) {
       ui.info("Action annulee.");
@@ -112,7 +118,8 @@ export async function manageOptions(session: DatabaseSession): Promise<void> {
       await taQ.removeTradingAccountOption(conn, account.trading_account_uuid, option.option_uuid);
 
       await auditLogQ.insertAuditLog(conn, "REMOVE_OPTION", "trading_account_options", account.trading_account_uuid, {
-        ctrader_id: account.ctrader_trading_account,
+        broker_name: accountDisplay.brokerName,
+        account_login: accountDisplay.login,
         option_name: option.name,
         option_uuid: option.option_uuid,
       }, operator, env);

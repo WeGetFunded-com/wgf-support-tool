@@ -2,6 +2,7 @@ import { select } from "@inquirer/prompts";
 import type { DatabaseSession } from "../db.js";
 import * as taQ from "../queries/trading-account.queries.js";
 import * as auditLogQ from "../queries/audit-log.queries.js";
+import * as baQ from "../queries/broker-account.queries.js";
 import { DEACTIVATION_REASONS } from "../types.js";
 import * as ui from "../ui.js";
 import { searchTradingAccountPrompt, confirmProductionAction } from "../utils/prompts.js";
@@ -19,9 +20,11 @@ export async function deactivateAccount(session: DatabaseSession): Promise<void>
     return;
   }
 
+  const accountDisplay = await baQ.getAccountDisplayId(conn, account);
+
   ui.sectionHeader("Compte a desactiver");
   renderKeyValue({
-    "cTrader ID": String(account.ctrader_trading_account),
+    "Compte": accountDisplay.label,
     "Phase": formatPhase(account.challenge_phase),
     "Serveur": formatServer(account.ctrader_server),
     "Profit Target": formatPercent(account.current_profit_target_percent),
@@ -37,7 +40,7 @@ export async function deactivateAccount(session: DatabaseSession): Promise<void>
   });
 
   const description =
-    `Desactiver le compte cTrader ${account.ctrader_trading_account} ` +
+    `Desactiver le compte ${accountDisplay.label} ` +
     `(reason: ${reason})`;
 
   const confirmed = await confirmProductionAction(env, description);
@@ -51,13 +54,14 @@ export async function deactivateAccount(session: DatabaseSession): Promise<void>
     await taQ.deactivateAccount(conn, account.trading_account_uuid, reason);
 
     await auditLogQ.insertAuditLog(conn, "DEACTIVATE_ACCOUNT", "trading_account", account.trading_account_uuid, {
-      ctrader_id: account.ctrader_trading_account,
+      broker_name: accountDisplay.brokerName,
+      account_login: accountDisplay.login,
       phase: account.challenge_phase,
       reason,
     }, operator, env);
 
     await conn.commit();
-    ui.success(`Compte cTrader ${account.ctrader_trading_account} desactive (${reason}).`);
+    ui.success(`Compte ${accountDisplay.label} desactive (${reason}).`);
   } catch (err) {
     await conn.rollback();
     throw err;
