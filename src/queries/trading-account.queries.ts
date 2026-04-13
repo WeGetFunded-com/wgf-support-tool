@@ -157,23 +157,26 @@ export async function reactivateAccount(
   conn: Conn,
   taUuid: string,
   reason: string,
-  profitTarget?: number
+  profitTarget?: number,
+  newPhaseEnd?: string
 ): Promise<void> {
+  const sets = ["success = NULL", "reason = ?"];
+  const params: (string | number)[] = [reason];
   if (profitTarget !== undefined) {
-    await conn.execute(
-      `UPDATE trading_account
-       SET success = NULL, reason = ?, current_profit_target_percent = ?
-       WHERE trading_account_uuid = UUID_TO_BIN(?)`,
-      [reason, profitTarget, taUuid]
-    );
-  } else {
-    await conn.execute(
-      `UPDATE trading_account
-       SET success = NULL, reason = ?
-       WHERE trading_account_uuid = UUID_TO_BIN(?)`,
-      [reason, taUuid]
-    );
+    sets.push("current_profit_target_percent = ?");
+    params.push(profitTarget);
   }
+  if (newPhaseEnd !== undefined) {
+    sets.push("challenge_phase_end = ?");
+    params.push(newPhaseEnd);
+  }
+  params.push(taUuid);
+  await conn.execute(
+    `UPDATE trading_account
+     SET ${sets.join(", ")}
+     WHERE trading_account_uuid = UUID_TO_BIN(?)`,
+    params
+  );
 }
 
 export async function markAccountSuccess(

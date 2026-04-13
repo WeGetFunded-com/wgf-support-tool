@@ -8,7 +8,7 @@ import { REASONS } from "../types.js";
 import * as ui from "../ui.js";
 import { searchTradingAccountPrompt, confirmProductionAction } from "../utils/prompts.js";
 import { renderKeyValue } from "../utils/table.js";
-import { formatPhase, formatPercent, formatSuccess, formatServer } from "../utils/format.js";
+import { formatPhase, formatPercent, formatSuccess, formatServer, formatDate } from "../utils/format.js";
 
 export async function reactivateAccount(session: DatabaseSession): Promise<void> {
   const { connection: conn, env, operator } = session;
@@ -31,6 +31,17 @@ export async function reactivateAccount(session: DatabaseSession): Promise<void>
   // Show current state
   const rules = await challengeQ.getChallengeRules(conn, account.challenge_uuid, account.challenge_phase);
 
+  // If challenge_phase_end is past, auto-extend by 1 year (otherwise the watcher
+  // will instantly re-mark the account CHALLENGE_EXPIRED and provision a zombie).
+  const phaseEndDate = new Date(account.challenge_phase_end);
+  const phaseEndExpired = phaseEndDate.getTime() < Date.now();
+  let newPhaseEnd: string | undefined;
+  if (phaseEndExpired) {
+    const extended = new Date();
+    extended.setFullYear(extended.getFullYear() + 1);
+    newPhaseEnd = formatDate(extended);
+  }
+
   ui.sectionHeader("Compte a reactiver");
   renderKeyValue({
     "Compte": accountDisplay.label,
@@ -40,6 +51,10 @@ export async function reactivateAccount(session: DatabaseSession): Promise<void>
     "Reason": account.reason || "-",
     "Profit Target actuel": formatPercent(account.current_profit_target_percent),
     "Profit Target reference (rules)": rules ? formatPercent(rules.profit_target_percent) : "N/A",
+    "Fin de phase actuelle": formatDate(account.challenge_phase_end),
+    "Nouvelle fin de phase": phaseEndExpired
+      ? `${newPhaseEnd} (auto: today + 1 an, l'ancienne est expiree)`
+      : "Inchangee (encore valide)",
   });
 
   // Ask if profit target adjustment is needed
@@ -71,6 +86,9 @@ export async function reactivateAccount(session: DatabaseSession): Promise<void>
     `Reactiver le compte ${accountDisplay.label}` +
     (newProfitTarget !== undefined
       ? ` avec profit target ${formatPercent(newProfitTarget)}`
+      : "") +
+    (newPhaseEnd !== undefined
+      ? ` + extension fin de phase a ${newPhaseEnd}`
       : "");
 
   const confirmed = await confirmProductionAction(env, description);
@@ -81,7 +99,7 @@ export async function reactivateAccount(session: DatabaseSession): Promise<void>
 
   await conn.beginTransaction();
   try {
-    await taQ.reactivateAccount(conn, account.trading_account_uuid, reason, newProfitTarget);
+    await taQ.reactivateAccount(conn, account.trading_account_uuid, reason, newProfitTarget, newPhaseEnd);
 
     await auditLogQ.insertAuditLog(conn, "REACTIVATE_ACCOUNT", "trading_account", account.trading_account_uuid, {
       broker_name: accountDisplay.brokerName,
@@ -90,6 +108,9 @@ export async function reactivateAccount(session: DatabaseSession): Promise<void>
       previous_success: account.success,
       new_profit_target: newProfitTarget ?? account.current_profit_target_percent,
       profit_target_adjusted: adjustTarget === "yes",
+      previous_phase_end: formatDate(account.challenge_phase_end),
+      new_phase_end: newPhaseEnd ?? null,
+      phase_end_extended: newPhaseEnd !== undefined,
     }, operator, env);
 
     await conn.commit();
