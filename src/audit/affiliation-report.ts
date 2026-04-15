@@ -101,10 +101,13 @@ export async function affiliationReport(session: DatabaseSession): Promise<void>
   );
 
   // ── Reglements precedents ──
+  ui.sectionHeader("Reglements precedents");
+
   const settlements = await affQ.getSettlementsByOwner(conn, user.user_uuid);
 
-  if (settlements.length > 0) {
-    ui.sectionHeader("Reglements precedents");
+  if (settlements.length === 0) {
+    ui.info("Aucun reglement enregistre.");
+  } else {
     renderTable(
       ["Date", "Montant", "Operateur", "Environnement", "Note"],
       settlements.map((s) => [
