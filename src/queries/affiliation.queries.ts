@@ -81,6 +81,51 @@ export async function getRegistrationsByOwner(
   return rows as AffiliationRegistrationRow[];
 }
 
+export interface DbAffiliationSettlement {
+  settlement_uuid: string;
+  owner_uuid: string;
+  amount: number;
+  currency: string;
+  settled_at: Date;
+  operator: string;
+  environment: string;
+  note: string | null;
+}
+
+export async function getSettlementsByOwner(
+  conn: Conn,
+  userUuid: string
+): Promise<DbAffiliationSettlement[]> {
+  const [rows] = await conn.execute(
+    `SELECT BIN_TO_UUID(settlement_uuid) as settlement_uuid,
+            BIN_TO_UUID(owner_uuid) as owner_uuid,
+            amount, currency, settled_at, operator, environment, note
+     FROM affiliation_settlement
+     WHERE owner_uuid = UUID_TO_BIN(?)
+     ORDER BY settled_at DESC`,
+    [userUuid]
+  );
+  return rows as DbAffiliationSettlement[];
+}
+
+export async function insertSettlement(
+  conn: Conn,
+  settlementUuid: string,
+  ownerUuid: string,
+  amount: number,
+  currency: string,
+  operator: string,
+  environment: string,
+  note: string | null
+): Promise<void> {
+  await conn.execute(
+    `INSERT INTO affiliation_settlement
+       (settlement_uuid, owner_uuid, amount, currency, operator, environment, note)
+     VALUES (UUID_TO_BIN(?), UUID_TO_BIN(?), ?, ?, ?, ?, ?)`,
+    [settlementUuid, ownerUuid, amount, currency, operator, environment, note]
+  );
+}
+
 export async function getSalesByOwner(
   conn: Conn,
   userUuid: string

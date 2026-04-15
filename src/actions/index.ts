@@ -13,6 +13,7 @@ import { manageOptions } from "./manage-options.js";
 import { updateCtraderId } from "./update-ctrader-id.js";
 import { verifyDeactivation } from "./verify-deactivation.js";
 import { forcePhaseTransition } from "./force-phase-transition.js";
+import { resetAffiliationBalance } from "./reset-affiliation-balance.js";
 import * as ui from "../ui.js";
 
 type ActionChoice =
@@ -28,6 +29,7 @@ type ActionChoice =
   | "manage_options"
   | "update_ctrader_id"
   | "verify_deactivation"
+  | "reset_affiliation_balance"
   | "back";
 
 export async function actionsMenu(session: DatabaseSession, config: Config): Promise<void> {
@@ -50,6 +52,7 @@ export async function actionsMenu(session: DatabaseSession, config: Config): Pro
         { name: "Gerer les options d'un compte", value: "manage_options" },
         { name: "Mettre a jour l'identifiant broker (cTrader/MT5)", value: "update_ctrader_id" },
         { name: "Verification de la desactivation d'un compte", value: "verify_deactivation" },
+        { name: "Remettre a 0 le solde d'affiliation d'un affilie", value: "reset_affiliation_balance" },
         { name: "Retour", value: "back" },
       ],
     });
@@ -93,6 +96,9 @@ export async function actionsMenu(session: DatabaseSession, config: Config): Pro
           break;
         case "verify_deactivation":
           await verifyDeactivation(session, config);
+          break;
+        case "reset_affiliation_balance":
+          await resetAffiliationBalance(session);
           break;
       }
     } catch (err: unknown) {

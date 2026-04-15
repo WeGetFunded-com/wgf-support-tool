@@ -100,6 +100,23 @@ export async function affiliationReport(session: DatabaseSession): Promise<void>
     })
   );
 
+  // ── Reglements precedents ──
+  const settlements = await affQ.getSettlementsByOwner(conn, user.user_uuid);
+
+  if (settlements.length > 0) {
+    ui.sectionHeader("Reglements precedents");
+    renderTable(
+      ["Date", "Montant", "Operateur", "Environnement", "Note"],
+      settlements.map((s) => [
+        formatDate(s.settled_at),
+        formatCurrency(s.amount, s.currency),
+        s.operator,
+        s.environment,
+        s.note ?? "-",
+      ])
+    );
+  }
+
   // ── Resume des commissions ──
   ui.sectionHeader("Resume des commissions");
 
@@ -115,6 +132,9 @@ export async function affiliationReport(session: DatabaseSession): Promise<void>
     0
   );
 
+  const totalSettled = settlements.reduce((sum, s) => sum + Number(s.amount), 0);
+  const currentBalance = totalCommission - totalSettled;
+
   const currency = salesWithPayment[0]?.payment_currency ?? "EUR";
   const uniqueBuyers = new Set(sales.map((s) => s.buyer_user_uuid)).size;
 
@@ -123,6 +143,8 @@ export async function affiliationReport(session: DatabaseSession): Promise<void>
     "Acheteurs uniques": String(uniqueBuyers),
     "Ventes totales": `${sales.length} (${salesWithPayment.length} payees, ${freeSales} gratuites)`,
     "Chiffre d'affaires": formatCurrency(totalRevenue, currency),
-    "Commission totale": formatCurrency(totalCommission, currency),
+    "Commission totale generee": formatCurrency(totalCommission, currency),
+    "Deja regle": formatCurrency(totalSettled, currency),
+    "Solde actuel a payer": formatCurrency(currentBalance, currency),
   });
 }

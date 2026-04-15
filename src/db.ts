@@ -22,6 +22,20 @@ CREATE TABLE IF NOT EXISTS admin_audit_log (
   executed_at DATETIME DEFAULT NOW()
 )`;
 
+const AFFILIATION_SETTLEMENT_DDL = `
+CREATE TABLE IF NOT EXISTS affiliation_settlement (
+  settlement_uuid BINARY(16) PRIMARY KEY,
+  owner_uuid BINARY(16) NOT NULL,
+  amount DECIMAL(14, 2) NOT NULL,
+  currency VARCHAR(3) NOT NULL DEFAULT 'EUR',
+  settled_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  operator VARCHAR(128) NOT NULL,
+  environment VARCHAR(16) NOT NULL,
+  note TEXT NULL,
+  INDEX idx_owner_uuid (owner_uuid),
+  INDEX idx_settled_at (settled_at)
+)`;
+
 export async function createSession(
   config: Config,
   env: Environment,
@@ -53,6 +67,9 @@ export async function createSession(
 
     // Auto-create audit log table
     await connection.execute(AUDIT_LOG_DDL);
+
+    // Auto-create affiliation settlement table
+    await connection.execute(AFFILIATION_SETTLEMENT_DDL);
 
     const tunnelRef = tunnel;
     const connRef = connection;
