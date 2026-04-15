@@ -8,6 +8,7 @@ import { searchUsers } from "./search-users.js";
 import { payoutReport } from "./payout-report.js";
 import { deactivationAnalysis } from "./deactivation-analysis.js";
 import { promoUsageAnalysis } from "./promo-usage-analysis.js";
+import { affiliationReport } from "./affiliation-report.js";
 import * as ui from "../ui.js";
 
 type AuditChoice =
@@ -18,6 +19,7 @@ type AuditChoice =
   | "payout_report"
   | "deactivation_analysis"
   | "promo_usage"
+  | "affiliation_report"
   | "back";
 
 export async function auditMenu(session: DatabaseSession, config: Config): Promise<void> {
@@ -35,6 +37,7 @@ export async function auditMenu(session: DatabaseSession, config: Config): Promi
         { name: "Rapport des demandes de payout", value: "payout_report" },
         { name: "Verification de la desactivation d'un compte", value: "deactivation_analysis" },
         { name: "Analyse de l'utilisation d'un code promo", value: "promo_usage" },
+        { name: "Analyse de l'affiliation", value: "affiliation_report" },
         { name: "Retour", value: "back" },
       ],
     });
@@ -63,6 +66,9 @@ export async function auditMenu(session: DatabaseSession, config: Config): Promi
           break;
         case "promo_usage":
           await promoUsageAnalysis(session);
+          break;
+        case "affiliation_report":
+          await affiliationReport(session);
           break;
       }
     } catch (err: unknown) {
