@@ -9,6 +9,8 @@ import * as orderQ from "../queries/order.queries.js";
 import * as challengeQ from "../queries/challenge.queries.js";
 import * as payoutQ from "../queries/payout.queries.js";
 import * as tradeHistoryQ from "../queries/trade-history.queries.js";
+import * as baQ from "../queries/broker-account.queries.js";
+import type { AccountDisplayInfo } from "../queries/broker-account.queries.js";
 import * as ui from "../ui.js";
 import { searchUserPrompt } from "../utils/prompts.js";
 import { renderKeyValue, renderTable } from "../utils/table.js";
@@ -92,7 +94,10 @@ export async function userReport(session: DatabaseSession, config: Config): Prom
     ta: DbTradingAccount;
     challenge: DbChallenge | null;
     balance: DbTradingAccountBalance | null;
+    display: AccountDisplayInfo;
   }> = [];
+
+  const displayMap = await baQ.getAccountsDisplayMap(conn, accounts);
 
   if (accounts.length === 0) {
     ui.info("Aucun compte de trading.");
@@ -101,9 +106,11 @@ export async function userReport(session: DatabaseSession, config: Config): Prom
     for (const ta of accounts) {
       const challenge = await challengeQ.getChallengeByUuid(conn, ta.challenge_uuid);
       const balance = await taQ.getLastBalanceAndEquity(conn, ta.trading_account_uuid);
-      accountDetails.push({ ta, challenge, balance });
+      const display = displayMap.get(ta.trading_account_uuid)!;
+      accountDetails.push({ ta, challenge, balance, display });
       rows.push([
-        String(ta.ctrader_trading_account),
+        display.brokerName.toUpperCase(),
+        String(display.login),
         challenge ? formatChallengeName(challenge.name) : "N/A",
         formatPhase(ta.challenge_phase, challenge?.type),
         formatSuccess(ta.success),
@@ -115,7 +122,7 @@ export async function userReport(session: DatabaseSession, config: Config): Prom
     }
 
     renderTable(
-      ["cTrader", "Challenge", "Phase", "Statut", "Serveur", "Target", "Balance", "Reason"],
+      ["Broker", "Login", "Challenge", "Phase", "Statut", "Serveur", "Target", "Balance", "Reason"],
       rows
     );
   }
@@ -127,8 +134,9 @@ export async function userReport(session: DatabaseSession, config: Config): Prom
 
     for (const ta of activeAccounts) {
       const summary = await tradeHistoryQ.getPositionsSummary(conn, ta.trading_account_uuid);
+      const display = displayMap.get(ta.trading_account_uuid)!;
       console.log(
-        `    cTrader ${ta.ctrader_trading_account} : ` +
+        `    ${display.label} : ` +
         `${summary.total} positions (${summary.open} ouvertes, ${summary.closed} fermees), ` +
         `PNL total: ${formatCurrency(summary.totalPnl)}` +
         (summary.invalidCount > 0 ? `, ${summary.invalidCount} invalide(s)` : "")
@@ -213,6 +221,7 @@ function buildUserReportRawData(
     ta: DbTradingAccount;
     challenge: DbChallenge | null;
     balance: DbTradingAccountBalance | null;
+    display: AccountDisplayInfo;
   }>,
   payouts: DbPayoutRequest[]
 ): string {
@@ -238,8 +247,8 @@ ${orders.map((o) =>
 
   if (accountDetails.length > 0) {
     sections.push(`=== COMPTES DE TRADING (${accountDetails.length}) ===
-${accountDetails.map(({ ta, challenge, balance }) =>
-      `cTrader ${ta.ctrader_trading_account} | challenge=${challenge?.name ?? "N/A"} (${challenge?.type ?? "N/A"}) | phase=${ta.challenge_phase} | success=${ta.success} | serveur=${ta.ctrader_server} | target=${ta.current_profit_target_percent} | balance=${balance?.balance ?? "N/A"} | equity=${balance?.equity ?? "N/A"} | reason=${ta.reason || "-"} | debut=${formatDate(ta.challenge_phase_begin)} | jours_trading=${ta.max_trading_day}`
+${accountDetails.map(({ ta, challenge, balance, display }) =>
+      `${display.label} | broker=${display.brokerName} | login=${display.login} | challenge=${challenge?.name ?? "N/A"} (${challenge?.type ?? "N/A"}) | phase=${ta.challenge_phase} | success=${ta.success} | serveur=${ta.ctrader_server} | target=${ta.current_profit_target_percent} | balance=${balance?.balance ?? "N/A"} | equity=${balance?.equity ?? "N/A"} | reason=${ta.reason || "-"} | debut=${formatDate(ta.challenge_phase_begin)} | jours_trading=${ta.max_trading_day}`
     ).join("\n")}`);
   } else {
     sections.push("=== COMPTES DE TRADING ===\nAucun compte.");

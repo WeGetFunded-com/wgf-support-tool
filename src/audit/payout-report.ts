@@ -32,10 +32,10 @@ export async function payoutReport(session: DatabaseSession): Promise<void> {
   ui.sectionHeader(`Demandes de payout${statusFilter ? ` (${statusFilter})` : ""}`);
 
   renderTable(
-    ["Email", "cTrader", "Methode", "Montant", "Profit", "Split", "Statut", "Date"],
+    ["Email", "Compte", "Methode", "Montant", "Profit", "Split", "Statut", "Date"],
     payouts.map((p) => [
       p.email,
-      String(p.ctrader_trading_account ?? "N/A"),
+      payoutQ.payoutAccountLabel(p),
       p.payout_method,
       formatCurrency(p.payout_amount),
       formatCurrency(p.total_profit),
@@ -64,7 +64,7 @@ export async function payoutReport(session: DatabaseSession): Promise<void> {
       renderKeyValue({
         "UUID": payout.payout_request_uuid,
         "Email": payout.email,
-        "cTrader": String(payout.ctrader_trading_account ?? "N/A"),
+        "Compte": payoutQ.payoutAccountLabel(payout),
         "Methode": payout.payout_method,
         "IBAN": payout.iban ?? "N/A",
         "Wallet": payout.wallet_address ?? "N/A",

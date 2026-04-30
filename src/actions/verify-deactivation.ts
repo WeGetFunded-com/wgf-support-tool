@@ -7,6 +7,7 @@ import * as tradeHistoryQ from "../queries/trade-history.queries.js";
 import * as auditLogQ from "../queries/audit-log.queries.js";
 import * as userQ from "../queries/user.queries.js";
 import * as baQ from "../queries/broker-account.queries.js";
+import type { AccountDisplayInfo } from "../queries/broker-account.queries.js";
 import * as ui from "../ui.js";
 import { searchTradingAccountPrompt, confirmProductionAction } from "../utils/prompts.js";
 import { renderKeyValue, renderTable } from "../utils/table.js";
@@ -48,6 +49,7 @@ export async function verifyDeactivation(
   const phaseHistory = await taQ.getAllTradingAccountsByOrder(conn, account.order_uuid);
   const user = await userQ.getUserByOrderUuid(conn, account.order_uuid);
   const auditLogs = await auditLogQ.getAuditLogsForTarget(conn, account.trading_account_uuid);
+  const phaseDisplayMap = await baQ.getAccountsDisplayMap(conn, phaseHistory);
 
   // Deactivation day history
   let deactivationDayHistory: Awaited<ReturnType<typeof tradeHistoryQ.getTradeHistoryForDate>> = [];
@@ -65,7 +67,8 @@ export async function verifyDeactivation(
   ui.sectionHeader("Informations du compte");
   renderKeyValue({
     "UUID": account.trading_account_uuid,
-    "Compte": accountDisplay.label,
+    "Broker": accountDisplay.brokerName.toUpperCase(),
+    "Login": String(accountDisplay.login),
     "Serveur": formatServer(account.ctrader_server),
     "Phase": formatPhase(account.challenge_phase, challenge?.type),
     "Statut": formatSuccess(account.success),
@@ -148,16 +151,20 @@ export async function verifyDeactivation(
   if (phaseHistory.length > 1) {
     ui.sectionHeader("Historique des phases");
     renderTable(
-      ["Phase", "Statut", "cTrader", "Serveur", "Target", "Debut", "Reason"],
-      phaseHistory.map((ta) => [
-        formatPhase(ta.challenge_phase),
-        formatSuccess(ta.success),
-        String(ta.ctrader_trading_account),
-        formatServer(ta.ctrader_server),
-        formatPercent(ta.current_profit_target_percent),
-        formatDate(ta.challenge_phase_begin),
-        ta.reason || "-",
-      ])
+      ["Phase", "Statut", "Broker", "Login", "Serveur", "Target", "Debut", "Reason"],
+      phaseHistory.map((ta) => {
+        const d = phaseDisplayMap.get(ta.trading_account_uuid)!;
+        return [
+          formatPhase(ta.challenge_phase),
+          formatSuccess(ta.success),
+          d.brokerName.toUpperCase(),
+          String(d.login),
+          formatServer(ta.ctrader_server),
+          formatPercent(ta.current_profit_target_percent),
+          formatDate(ta.challenge_phase_begin),
+          ta.reason || "-",
+        ];
+      })
     );
   }
 
@@ -241,9 +248,9 @@ export async function verifyDeactivation(
   // 5. Launch interactive chat with AI
   if (config.openRouterApiKey) {
     const rawData = buildRawDataString(
-      account, challenge, rules, balance, firstHistory, options,
+      account, accountDisplay, challenge, rules, balance, firstHistory, options,
       tradeHistory, deactivationDayHistory, positions, positionsSummary,
-      phaseHistory, user, auditLogs
+      phaseHistory, phaseDisplayMap, user, auditLogs
     );
 
     await interactiveChat(
@@ -309,6 +316,7 @@ export async function verifyDeactivation(
 
 function buildRawDataString(
   account: any,
+  accountDisplay: AccountDisplayInfo,
   challenge: any,
   rules: any,
   balance: any,
@@ -319,6 +327,7 @@ function buildRawDataString(
   positions: any[],
   positionsSummary: any,
   phaseHistory: any[],
+  phaseDisplayMap: Map<string, AccountDisplayInfo>,
   user: any,
   auditLogs: any[]
 ): string {
@@ -326,7 +335,8 @@ function buildRawDataString(
 
   sections.push(`=== COMPTE ===
 UUID: ${account.trading_account_uuid}
-cTrader ID: ${account.ctrader_trading_account}
+Broker: ${accountDisplay.brokerName}
+Login: ${accountDisplay.login}
 Serveur: ${account.ctrader_server}
 Phase: ${account.challenge_phase}
 Statut: success=${account.success}
@@ -386,9 +396,11 @@ ${options.map((o) => `- ${o.name} (majoration: ${o.majoration_percent})`).join("
 
   if (phaseHistory.length > 0) {
     sections.push(`=== HISTORIQUE DES PHASES ===
-${phaseHistory.map((ta) =>
-      `Phase ${ta.challenge_phase} | success=${ta.success} | cTrader=${ta.ctrader_trading_account} | target=${ta.current_profit_target_percent} | debut=${formatDate(ta.challenge_phase_begin)} | reason=${ta.reason || "-"}`
-    ).join("\n")}`);
+${phaseHistory.map((ta) => {
+      const d = phaseDisplayMap.get(ta.trading_account_uuid);
+      const loginLabel = d ? `${d.brokerName}=${d.login}` : `cTrader=${ta.ctrader_trading_account}`;
+      return `Phase ${ta.challenge_phase} | success=${ta.success} | ${loginLabel} | target=${ta.current_profit_target_percent} | debut=${formatDate(ta.challenge_phase_begin)} | reason=${ta.reason || "-"}`;
+    }).join("\n")}`);
   }
 
   if (tradeHistory.length > 0) {

@@ -1,12 +1,38 @@
 import type mysql from "mysql2/promise";
-import type { DbPayoutRequest } from "../types.js";
+import type { BrokerName, DbPayoutRequest } from "../types.js";
 
 type Conn = mysql.Connection;
 
 export interface PayoutWithEmail extends DbPayoutRequest {
   email: string;
   ctrader_trading_account: number;
+  broker_login: number | null;
+  broker_name: BrokerName | null;
 }
+
+export function payoutAccountLabel(p: PayoutWithEmail): string {
+  if (p.broker_login != null) {
+    return p.broker_name === "mt5"
+      ? `MT5 ${p.broker_login}`
+      : `cTrader ${p.broker_login}`;
+  }
+  if (p.ctrader_trading_account) {
+    return `cTrader ${p.ctrader_trading_account}`;
+  }
+  return "N/A";
+}
+
+const PAYOUT_BROKER_JOIN = `
+    LEFT JOIN trading_account ta ON pr.trading_account_uuid = ta.trading_account_uuid
+    LEFT JOIN broker_accounts ba
+      ON ba.trading_account_id = pr.trading_account_uuid AND ba.active = 1
+`;
+
+const PAYOUT_BROKER_COLS = `
+      ta.ctrader_trading_account,
+      ba.login as broker_login,
+      ba.broker_name as broker_name
+`;
 
 export async function getPayoutsByStatus(
   conn: Conn,
@@ -22,10 +48,10 @@ export async function getPayoutsByStatus(
       pr.balance_before_request, pr.total_profit, pr.payout_amount,
       pr.profit_split, pr.status, pr.created_at, pr.updated_at,
       u.email,
-      ta.ctrader_trading_account
+      ${PAYOUT_BROKER_COLS}
     FROM payout_request pr
     JOIN user u ON pr.user_uuid = u.user_uuid
-    LEFT JOIN trading_account ta ON pr.trading_account_uuid = ta.trading_account_uuid
+    ${PAYOUT_BROKER_JOIN}
   `;
   const params: any[] = [];
 
@@ -75,10 +101,10 @@ export async function getPayoutByUuid(
        pr.balance_before_request, pr.total_profit, pr.payout_amount,
        pr.profit_split, pr.status, pr.created_at, pr.updated_at,
        u.email,
-       ta.ctrader_trading_account
+       ${PAYOUT_BROKER_COLS}
      FROM payout_request pr
      JOIN user u ON pr.user_uuid = u.user_uuid
-     LEFT JOIN trading_account ta ON pr.trading_account_uuid = ta.trading_account_uuid
+     ${PAYOUT_BROKER_JOIN}
      WHERE pr.payout_request_uuid = UUID_TO_BIN(?)`,
     [uuid]
   );

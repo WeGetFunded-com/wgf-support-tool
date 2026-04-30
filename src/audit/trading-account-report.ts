@@ -2,6 +2,7 @@ import type { DatabaseSession } from "../db.js";
 import * as taQ from "../queries/trading-account.queries.js";
 import * as challengeQ from "../queries/challenge.queries.js";
 import * as tradeHistoryQ from "../queries/trade-history.queries.js";
+import * as baQ from "../queries/broker-account.queries.js";
 import * as ui from "../ui.js";
 import { searchTradingAccountPrompt } from "../utils/prompts.js";
 import { renderKeyValue, renderTable } from "../utils/table.js";
@@ -19,13 +20,15 @@ export async function tradingAccountReport(session: DatabaseSession): Promise<vo
   const challenge = await challengeQ.getChallengeByUuid(conn, account.challenge_uuid);
   const balance = await taQ.getLastBalanceAndEquity(conn, account.trading_account_uuid);
   const options = await taQ.getTradingAccountOptions(conn, account.trading_account_uuid);
+  const accountDisplay = await baQ.getAccountDisplayId(conn, account);
 
   // ── Infos du compte ──
-  ui.sectionHeader(`Compte de trading : cTrader ${account.ctrader_trading_account}`);
+  ui.sectionHeader(`Compte de trading : ${accountDisplay.label}`);
 
   renderKeyValue({
     "UUID": account.trading_account_uuid,
-    "cTrader ID": String(account.ctrader_trading_account),
+    "Broker": accountDisplay.brokerName.toUpperCase(),
+    "Login": String(accountDisplay.login),
     "Serveur": formatServer(account.ctrader_server),
     "Challenge": challenge ? `${formatChallengeName(challenge.name)} (${challenge.type})` : "N/A",
     "Phase": formatPhase(account.challenge_phase, challenge?.type),
@@ -85,19 +88,24 @@ export async function tradingAccountReport(session: DatabaseSession): Promise<vo
   ui.sectionHeader("Historique des phases");
 
   const phaseHistory = await taQ.getAllTradingAccountsByOrder(conn, account.order_uuid);
+  const phaseDisplayMap = await baQ.getAccountsDisplayMap(conn, phaseHistory);
 
   if (phaseHistory.length > 1) {
     renderTable(
-      ["Phase", "Statut", "cTrader", "Serveur", "Target", "Debut", "Reason"],
-      phaseHistory.map((ta) => [
-        formatPhase(ta.challenge_phase),
-        formatSuccess(ta.success),
-        String(ta.ctrader_trading_account),
-        formatServer(ta.ctrader_server),
-        formatPercent(ta.current_profit_target_percent),
-        formatDate(ta.challenge_phase_begin),
-        ta.reason || "-",
-      ])
+      ["Phase", "Statut", "Broker", "Login", "Serveur", "Target", "Debut", "Reason"],
+      phaseHistory.map((ta) => {
+        const d = phaseDisplayMap.get(ta.trading_account_uuid)!;
+        return [
+          formatPhase(ta.challenge_phase),
+          formatSuccess(ta.success),
+          d.brokerName.toUpperCase(),
+          String(d.login),
+          formatServer(ta.ctrader_server),
+          formatPercent(ta.current_profit_target_percent),
+          formatDate(ta.challenge_phase_begin),
+          ta.reason || "-",
+        ];
+      })
     );
   } else {
     ui.info("Pas de progression de phase (une seule phase).");

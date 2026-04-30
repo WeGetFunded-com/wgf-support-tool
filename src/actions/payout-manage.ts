@@ -63,7 +63,7 @@ async function handlePayoutSelection(
   renderKeyValue({
     "UUID": payout.payout_request_uuid,
     "Email": payout.email,
-    "cTrader": String(payout.ctrader_trading_account ?? "N/A"),
+    "Compte": payoutQ.payoutAccountLabel(payout),
     "Methode": payout.payout_method,
     "IBAN": payout.iban ?? "N/A",
     "Wallet": payout.wallet_address ?? "N/A",

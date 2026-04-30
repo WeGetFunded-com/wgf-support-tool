@@ -97,6 +97,49 @@ export async function getAccountDisplayId(
   };
 }
 
+export async function getAccountsDisplayMap(
+  conn: Conn,
+  accounts: DbTradingAccount[]
+): Promise<Map<string, AccountDisplayInfo>> {
+  const map = new Map<string, AccountDisplayInfo>();
+  if (accounts.length === 0) return map;
+
+  const uuids = accounts.map((a) => a.trading_account_uuid);
+  const placeholders = uuids.map(() => "UUID_TO_BIN(?)").join(", ");
+
+  const [rows] = await conn.execute(
+    `SELECT
+       BIN_TO_UUID(ba.trading_account_id) as trading_account_id,
+       ba.broker_name, ba.login
+     FROM broker_accounts ba
+     WHERE ba.trading_account_id IN (${placeholders}) AND ba.active = 1`,
+    uuids
+  );
+  const brokerRows = rows as Array<{ trading_account_id: string; broker_name: BrokerName; login: number }>;
+  const byTa = new Map<string, { broker_name: BrokerName; login: number }>();
+  for (const r of brokerRows) byTa.set(r.trading_account_id, { broker_name: r.broker_name, login: r.login });
+
+  for (const account of accounts) {
+    const broker = byTa.get(account.trading_account_uuid);
+    if (broker) {
+      map.set(account.trading_account_uuid, {
+        brokerName: broker.broker_name,
+        login: broker.login,
+        label: broker.broker_name === "mt5"
+          ? `MT5 Login ${broker.login}`
+          : `cTrader ${broker.login}`,
+      });
+    } else {
+      map.set(account.trading_account_uuid, {
+        brokerName: "ctrader",
+        login: account.ctrader_trading_account,
+        label: `cTrader ${account.ctrader_trading_account}`,
+      });
+    }
+  }
+  return map;
+}
+
 export async function updateBrokerAccountLogin(
   conn: Conn,
   brokerAccountId: string,
