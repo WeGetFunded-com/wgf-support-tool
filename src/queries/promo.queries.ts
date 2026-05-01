@@ -94,6 +94,33 @@ export async function getOrdersByPromoCode(conn: Conn, code: string): Promise<Pr
   return rows as PromoUsageRow[];
 }
 
+export interface PromoSummary {
+  promo_uuid: string;
+  code: string;
+  percent_promo: number;
+  is_valid: number;
+}
+
+// getPromosByUuids batch-loads code + percent for a list of promo UUIDs.
+// Returns a Map keyed by promo_uuid (string). Null/undefined inputs are skipped.
+export async function getPromosByUuids(conn: Conn, uuids: (string | null | undefined)[]): Promise<Map<string, PromoSummary>> {
+  const result = new Map<string, PromoSummary>();
+  const unique = Array.from(new Set(uuids.filter((u): u is string => !!u)));
+  if (unique.length === 0) return result;
+
+  const placeholders = unique.map(() => "UUID_TO_BIN(?)").join(",");
+  const [rows] = await conn.execute(
+    `SELECT BIN_TO_UUID(promo_uuid) as promo_uuid, code, percent_promo, is_valid
+     FROM promo
+     WHERE promo_uuid IN (${placeholders})`,
+    unique
+  );
+  for (const r of rows as PromoSummary[]) {
+    result.set(r.promo_uuid, r);
+  }
+  return result;
+}
+
 export async function createPromo(conn: Conn, data: CreatePromoData): Promise<void> {
   await conn.execute(
     `INSERT INTO promo (

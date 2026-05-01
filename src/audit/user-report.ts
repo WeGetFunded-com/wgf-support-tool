@@ -10,6 +10,8 @@ import * as challengeQ from "../queries/challenge.queries.js";
 import * as payoutQ from "../queries/payout.queries.js";
 import * as tradeHistoryQ from "../queries/trade-history.queries.js";
 import * as baQ from "../queries/broker-account.queries.js";
+import * as promoQ from "../queries/promo.queries.js";
+import type { PromoSummary } from "../queries/promo.queries.js";
 import type { AccountDisplayInfo } from "../queries/broker-account.queries.js";
 import * as ui from "../ui.js";
 import { searchUserPrompt } from "../utils/prompts.js";
@@ -42,16 +44,47 @@ export async function userReport(session: DatabaseSession, config: Config): Prom
     "Provider": user.provider_id ?? "N/A",
   });
 
+  // Fetch orders + TAs upfront so we can batch-load promos once and use the
+  // map in both "Commandes" and "Comptes de trading" tables.
+  const orders = await orderQ.getOrdersByUser(conn, user.user_uuid);
+  const accounts = await taQ.getAllTradingAccountsByUser(conn, user.user_uuid);
+
+  const orderByUuid = new Map(orders.map((o) => [o.order_uuid, o]));
+  const promoMap = await promoQ.getPromosByUuids(
+    conn,
+    [
+      ...orders.map((o) => o.promo_uuid),
+      ...accounts.map((a) => a.promo_uuid),
+    ]
+  );
+  const formatPromo = (p: PromoSummary | null): string => {
+    if (!p) return "-";
+    const pct = Number(p.percent_promo);
+    const suffix = Number.isFinite(pct) && pct > 0 ? ` (-${pct}%)` : "";
+    return `${p.code}${suffix}`;
+  };
+  const orderPromo = (orderUuid: string): PromoSummary | null => {
+    const o = orderByUuid.get(orderUuid);
+    return o?.promo_uuid ? promoMap.get(o.promo_uuid) ?? null : null;
+  };
+  // TA-level promo wins (it reflects what was actually applied to the
+  // trading_account row); fall back to the order's promo otherwise.
+  const resolvePromo = (ta: DbTradingAccount): PromoSummary | null => {
+    if (ta.promo_uuid) {
+      const p = promoMap.get(ta.promo_uuid);
+      if (p) return p;
+    }
+    return orderPromo(ta.order_uuid);
+  };
+
   // ── Commandes ──
   ui.sectionHeader("Commandes");
-
-  const orders = await orderQ.getOrdersByUser(conn, user.user_uuid);
 
   if (orders.length === 0) {
     ui.info("Aucune commande.");
   } else {
     renderTable(
-      ["Order UUID", "Challenge", "Type", "Balance", "Paiement", "Prix", "Ref", "Date"],
+      ["Order UUID", "Challenge", "Type", "Balance", "Paiement", "Prix", "Promo", "Ref", "Date"],
       orders.map((o) => [
         o.order_uuid.slice(0, 8) + "...",
         o.challenge_name ? formatChallengeName(o.challenge_name) : "N/A",
@@ -59,6 +92,7 @@ export async function userReport(session: DatabaseSession, config: Config): Prom
         o.challenge_initial_coins_amount != null ? formatCurrency(o.challenge_initial_coins_amount) : "N/A",
         o.payment_method ?? "N/A",
         o.payment_price != null ? formatCurrency(o.payment_price / 100, o.payment_currency) : "N/A",
+        formatPromo(orderPromo(o.order_uuid)),
         o.payment_proof ? o.payment_proof.slice(0, 12) + "..." : "N/A",
         formatDate(o.payment_date),
       ])
@@ -88,13 +122,12 @@ export async function userReport(session: DatabaseSession, config: Config): Prom
   // ── Comptes de trading ──
   ui.sectionHeader("Comptes de trading");
 
-  const accounts = await taQ.getAllTradingAccountsByUser(conn, user.user_uuid);
-
   const accountDetails: Array<{
     ta: DbTradingAccount;
     challenge: DbChallenge | null;
     balance: DbTradingAccountBalance | null;
     display: AccountDisplayInfo;
+    promo: PromoSummary | null;
   }> = [];
 
   const displayMap = await baQ.getAccountsDisplayMap(conn, accounts);
@@ -107,7 +140,8 @@ export async function userReport(session: DatabaseSession, config: Config): Prom
       const challenge = await challengeQ.getChallengeByUuid(conn, ta.challenge_uuid);
       const balance = await taQ.getLastBalanceAndEquity(conn, ta.trading_account_uuid);
       const display = displayMap.get(ta.trading_account_uuid)!;
-      accountDetails.push({ ta, challenge, balance, display });
+      const promo = resolvePromo(ta);
+      accountDetails.push({ ta, challenge, balance, display, promo });
       rows.push([
         display.brokerName.toUpperCase(),
         String(display.login),
@@ -117,12 +151,13 @@ export async function userReport(session: DatabaseSession, config: Config): Prom
         formatServer(ta.ctrader_server),
         formatPercent(ta.current_profit_target_percent),
         balance ? formatCurrency(balance.balance) : "N/A",
+        formatPromo(promo),
         ta.reason || "-",
       ]);
     }
 
     renderTable(
-      ["Broker", "Login", "Challenge", "Phase", "Statut", "Serveur", "Target", "Balance", "Reason"],
+      ["Broker", "Login", "Challenge", "Phase", "Statut", "Serveur", "Target", "Balance", "Promo", "Reason"],
       rows
     );
   }
@@ -181,7 +216,7 @@ export async function userReport(session: DatabaseSession, config: Config): Prom
 
   if (aiChoice === "done") return;
 
-  const rawData = buildUserReportRawData(user, orders, accountDetails, payouts);
+  const rawData = buildUserReportRawData(user, orders, accountDetails, payouts, promoMap);
 
   await interactiveChat(
     config.openRouterApiKey,
@@ -222,9 +257,17 @@ function buildUserReportRawData(
     challenge: DbChallenge | null;
     balance: DbTradingAccountBalance | null;
     display: AccountDisplayInfo;
+    promo: PromoSummary | null;
   }>,
-  payouts: DbPayoutRequest[]
+  payouts: DbPayoutRequest[],
+  promoMap: Map<string, PromoSummary>
 ): string {
+  const promoLabel = (promoUuid: string | null | undefined): string => {
+    if (!promoUuid) return "-";
+    const p = promoMap.get(promoUuid);
+    return p ? `${p.code} (-${p.percent_promo}%)` : promoUuid;
+  };
+
   const sections: string[] = [];
 
   sections.push(`=== UTILISATEUR ===
@@ -239,7 +282,7 @@ Compte actif: ${user.valid ? "Oui" : "Non"}`);
   if (orders.length > 0) {
     sections.push(`=== COMMANDES (${orders.length}) ===
 ${orders.map((o) =>
-      `Order ${o.order_uuid} | challenge=${o.challenge_name ?? "N/A"} (${o.challenge_type ?? "N/A"}) | balance_initiale=${o.challenge_initial_coins_amount ?? "N/A"} | paiement=${o.payment_method ?? "N/A"} | prix=${o.payment_price != null ? (o.payment_price / 100).toFixed(2) : "N/A"} ${(o.payment_currency ?? "EUR").toUpperCase()} | ref=${o.payment_proof ?? "N/A"} | date=${formatDate(o.payment_date)}`
+      `Order ${o.order_uuid} | challenge=${o.challenge_name ?? "N/A"} (${o.challenge_type ?? "N/A"}) | balance_initiale=${o.challenge_initial_coins_amount ?? "N/A"} | paiement=${o.payment_method ?? "N/A"} | prix=${o.payment_price != null ? (o.payment_price / 100).toFixed(2) : "N/A"} ${(o.payment_currency ?? "EUR").toUpperCase()} | promo=${promoLabel(o.promo_uuid)} | ref=${o.payment_proof ?? "N/A"} | date=${formatDate(o.payment_date)}`
     ).join("\n")}`);
   } else {
     sections.push("=== COMMANDES ===\nAucune commande.");
@@ -247,8 +290,8 @@ ${orders.map((o) =>
 
   if (accountDetails.length > 0) {
     sections.push(`=== COMPTES DE TRADING (${accountDetails.length}) ===
-${accountDetails.map(({ ta, challenge, balance, display }) =>
-      `${display.label} | broker=${display.brokerName} | login=${display.login} | challenge=${challenge?.name ?? "N/A"} (${challenge?.type ?? "N/A"}) | phase=${ta.challenge_phase} | success=${ta.success} | serveur=${ta.ctrader_server} | target=${ta.current_profit_target_percent} | balance=${balance?.balance ?? "N/A"} | equity=${balance?.equity ?? "N/A"} | reason=${ta.reason || "-"} | debut=${formatDate(ta.challenge_phase_begin)} | jours_trading=${ta.max_trading_day}`
+${accountDetails.map(({ ta, challenge, balance, display, promo }) =>
+      `${display.label} | broker=${display.brokerName} | login=${display.login} | challenge=${challenge?.name ?? "N/A"} (${challenge?.type ?? "N/A"}) | phase=${ta.challenge_phase} | success=${ta.success} | serveur=${ta.ctrader_server} | target=${ta.current_profit_target_percent} | balance=${balance?.balance ?? "N/A"} | equity=${balance?.equity ?? "N/A"} | promo=${promo ? `${promo.code} (-${promo.percent_promo}%)` : "-"} | reason=${ta.reason || "-"} | debut=${formatDate(ta.challenge_phase_begin)} | jours_trading=${ta.max_trading_day}`
     ).join("\n")}`);
   } else {
     sections.push("=== COMPTES DE TRADING ===\nAucun compte.");
