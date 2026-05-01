@@ -8,6 +8,13 @@ import * as optionsQ from "../queries/options.queries.js";
 import * as auditLogQ from "../queries/audit-log.queries.js";
 import * as baQ from "../queries/broker-account.queries.js";
 import { INITIAL_PHASE, type ChallengeType, type BrokerName } from "../types.js";
+
+// cTrader account creation has been removed from the tool — every new TA is
+// created on MT5. The full cTrader migration (Apr 2026) means the broker is no
+// longer used for new accounts; the older cTrader code paths in TAM remain only
+// for legacy reads. If you need to recreate a cTrader account specifically,
+// use the cTrader Manager terminal directly.
+const FORCED_BROKER: BrokerName = "mt5";
 import * as ui from "../ui.js";
 import { searchUserPrompt, confirmProductionAction } from "../utils/prompts.js";
 import { renderKeyValue } from "../utils/table.js";
@@ -36,26 +43,11 @@ export async function createTradingAccount(
 
   ui.info(`Utilisateur : ${user.firstname} ${user.lastname} (${user.email})`);
 
-  // 2. Select trading platform
-  const brokerName = await select<BrokerName>({
-    message: "Plateforme de trading :",
-    choices: [
-      { name: "cTrader", value: "ctrader" },
-      { name: "MT5", value: "mt5" },
-    ],
-  });
+  // 2. Trading platform — MT5 only (cTrader creation deprecated, see file header)
+  const brokerName: BrokerName = FORCED_BROKER;
+  ui.info(`Plateforme : ${formatBrokerName(brokerName)} (cTrader desactive)`);
 
-  // 3. Validate CTID (cTrader only)
-  if (brokerName === "ctrader" && !user.CTID) {
-    ui.error(
-      "L'utilisateur n'a pas de CTID (cTrader ID). " +
-      "Le CTID est necessaire pour que le TAM puisse lier le compte cTrader. " +
-      "L'utilisateur doit d'abord se connecter a la plateforme pour obtenir un CTID."
-    );
-    return;
-  }
-
-  // 4. Select challenge
+  // 3. Select challenge
   const challenges = await challengeQ.getPublishedAndFundedChallenges(conn);
   if (challenges.length === 0) {
     ui.error("Aucun challenge publie disponible.");
@@ -85,13 +77,13 @@ export async function createTradingAccount(
     });
   }
 
-  // 6. Determine initial phase
+  // 5. Determine initial phase
   const initialPhase = INITIAL_PHASE[challenge.type as ChallengeType] ?? 1;
 
   // For instant_funded, rules are at phase 3 but challenge_phase in DB is 0
   const rulesPhase = challenge.type === "instant_funded" ? 3 : initialPhase;
 
-  // 7. Get challenge rules
+  // 6. Get challenge rules
   const allRules = await challengeQ.getAllChallengeRules(conn, challenge.challenge_uuid);
   const currentPhaseRules = allRules.find((r) => r.phase === rulesPhase);
 
@@ -113,7 +105,7 @@ export async function createTradingAccount(
   }
   const challengeConfiguration = JSON.stringify(configObj);
 
-  // 8. Preview
+  // 7. Preview
   ui.sectionHeader("Preview de la creation");
 
   const selectedOptionNames = allOptions
@@ -123,9 +115,6 @@ export async function createTradingAccount(
   const previewFields: Record<string, string> = {};
   previewFields["Utilisateur"] = `${user.firstname} ${user.lastname} (${user.email})`;
   previewFields["Plateforme"] = formatBrokerName(brokerName);
-  if (brokerName === "ctrader") {
-    previewFields["CTID"] = String(user.CTID);
-  }
   previewFields["Challenge"] = `${formatChallengeName(challenge.name)} (${challenge.type})`;
   previewFields["Prix"] = formatCurrency(challenge.price);
   previewFields["Balance initiale"] = formatCurrency(challenge.initial_coins_amount);
@@ -268,12 +257,8 @@ export async function createTradingAccount(
     "Trading Account UUID": createdAccount?.trading_account_uuid ?? "N/A",
   };
 
-  if (brokerName === "mt5") {
-    recapFields["MT5 Login"] = accountLogin;
-    recapFields["Info"] = "Les identifiants MT5 ont ete envoyes par email";
-  } else {
-    recapFields["cTrader ID"] = createdAccount ? String(createdAccount.ctrader_trading_account) : "N/A (verifier manuellement)";
-  }
+  recapFields["MT5 Login"] = accountLogin;
+  recapFields["Info"] = "Les identifiants MT5 ont ete envoyes par email";
 
   recapFields["Options"] = selectedOptionNames.length > 0 ? selectedOptionNames.join(", ") : "Aucune";
 
