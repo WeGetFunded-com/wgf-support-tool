@@ -59,9 +59,15 @@ export async function userReport(session: DatabaseSession, config: Config): Prom
   );
   const formatPromo = (p: PromoSummary | null): string => {
     if (!p) return "-";
-    const pct = Number(p.percent_promo);
-    const suffix = Number.isFinite(pct) && pct > 0 ? ` (-${pct}%)` : "";
+    // percent_promo is stored as a fraction (0.5 = 50%, 0.007 = 0.7%).
+    // Multiply by 100 for human display.
+    const pct = Number(p.percent_promo) * 100;
+    const suffix = Number.isFinite(pct) && pct > 0 ? ` (-${formatPct(pct)}%)` : "";
     return `${p.code}${suffix}`;
+  };
+  const formatPct = (n: number): string => {
+    // Trim trailing zeroes: 50 → "50", 0.7 → "0.7", 12.5 → "12.5"
+    return n.toFixed(2).replace(/\.?0+$/, "");
   };
   const orderPromo = (orderUuid: string): PromoSummary | null => {
     const o = orderByUuid.get(orderUuid);
@@ -265,7 +271,9 @@ function buildUserReportRawData(
   const promoLabel = (promoUuid: string | null | undefined): string => {
     if (!promoUuid) return "-";
     const p = promoMap.get(promoUuid);
-    return p ? `${p.code} (-${p.percent_promo}%)` : promoUuid;
+    if (!p) return promoUuid;
+    const pct = Number(p.percent_promo) * 100;
+    return `${p.code} (-${pct.toFixed(2).replace(/\.?0+$/, "")}%)`;
   };
 
   const sections: string[] = [];
@@ -291,7 +299,7 @@ ${orders.map((o) =>
   if (accountDetails.length > 0) {
     sections.push(`=== COMPTES DE TRADING (${accountDetails.length}) ===
 ${accountDetails.map(({ ta, challenge, balance, display, promo }) =>
-      `${display.label} | broker=${display.brokerName} | login=${display.login} | challenge=${challenge?.name ?? "N/A"} (${challenge?.type ?? "N/A"}) | phase=${ta.challenge_phase} | success=${ta.success} | serveur=${ta.ctrader_server} | target=${ta.current_profit_target_percent} | balance=${balance?.balance ?? "N/A"} | equity=${balance?.equity ?? "N/A"} | promo=${promo ? `${promo.code} (-${promo.percent_promo}%)` : "-"} | reason=${ta.reason || "-"} | debut=${formatDate(ta.challenge_phase_begin)} | jours_trading=${ta.max_trading_day}`
+      `${display.label} | broker=${display.brokerName} | login=${display.login} | challenge=${challenge?.name ?? "N/A"} (${challenge?.type ?? "N/A"}) | phase=${ta.challenge_phase} | success=${ta.success} | serveur=${ta.ctrader_server} | target=${ta.current_profit_target_percent} | balance=${balance?.balance ?? "N/A"} | equity=${balance?.equity ?? "N/A"} | promo=${promo ? `${promo.code} (-${(Number(promo.percent_promo) * 100).toFixed(2).replace(/\.?0+$/, "")}%)` : "-"} | reason=${ta.reason || "-"} | debut=${formatDate(ta.challenge_phase_begin)} | jours_trading=${ta.max_trading_day}`
     ).join("\n")}`);
   } else {
     sections.push("=== COMPTES DE TRADING ===\nAucun compte.");
