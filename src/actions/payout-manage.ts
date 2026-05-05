@@ -1,6 +1,7 @@
 import { select } from "@inquirer/prompts";
 import type { DatabaseSession } from "../db.js";
 import * as payoutQ from "../queries/payout.queries.js";
+import * as tradingAccountQ from "../queries/trading-account.queries.js";
 import * as auditLogQ from "../queries/audit-log.queries.js";
 import * as ui from "../ui.js";
 import { confirmProductionAction } from "../utils/prompts.js";
@@ -108,8 +109,20 @@ async function handlePayoutSelection(
       new_status: action,
     }, operator, env);
 
+    if (action === "paid") {
+      await tradingAccountQ.lockDrawdown(conn, payout.trading_account_uuid);
+      await auditLogQ.insertAuditLog(conn, "PAYOUT_DRAWDOWN_RESET", "trading_account", payout.trading_account_uuid, {
+        email: payout.email,
+        payout_request_uuid: payout.payout_request_uuid,
+        payout_amount: payout.payout_amount,
+      }, operator, env);
+    }
+
     await conn.commit();
     ui.success(`Payout mis a jour : ${action}`);
+    if (action === "paid") {
+      ui.info("Drawdown floor verrouille a l'initial_amount pour ce compte.");
+    }
   } catch (err) {
     await conn.rollback();
     throw err;

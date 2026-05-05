@@ -140,6 +140,18 @@ export async function updateCtraderAccountId(
   );
 }
 
+export async function lockDrawdown(
+  conn: Conn,
+  taUuid: string
+): Promise<void> {
+  await conn.execute(
+    `UPDATE trading_account
+     SET drawdown_reset_at = NOW()
+     WHERE trading_account_uuid = UUID_TO_BIN(?)`,
+    [taUuid]
+  );
+}
+
 export async function deactivateAccount(
   conn: Conn,
   taUuid: string,
