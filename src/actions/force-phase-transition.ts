@@ -71,7 +71,6 @@ export async function forcePhaseTransition(
   }
 
   const isFundedTransition = FUNDED_PHASES.has(transition.nextPhase);
-  const isUnlimited = challenge.type === "unlimited";
 
   // 5. Preview
   ui.sectionHeader("Forcer le passage de phase");
@@ -88,13 +87,12 @@ export async function forcePhaseTransition(
     "Type de transition": isFundedTransition ? "Funded (via simulate/funded)" : "Phase suivante (via TAM)",
   });
 
-  // 5. For unlimited funded transition: ask about fees
+  // 5. For funded transition: ask about fees (standard + unlimited both have 149.90 EUR activation fees)
   let bypassFees = false;
-  if (isFundedTransition && isUnlimited) {
+  if (isFundedTransition) {
     console.log("");
     ui.info(
-      "Ce compte unlimited necessite 149.90 EUR de frais d'activation " +
-      "pour passer en funded."
+      "Le passage en funded necessite 149.90 EUR de frais d'activation."
     );
 
     const bypassChoice = await select({
@@ -116,7 +114,7 @@ export async function forcePhaseTransition(
   // 6. Confirm
   const description = isFundedTransition
     ? `Forcer le passage en ${formatPhase(transition.nextPhase)} : ${accountDisplay.label}` +
-      (isUnlimited && bypassFees ? " (frais bypasses)" : "")
+      (bypassFees ? " (frais bypasses)" : "")
     : `Forcer le passage en ${formatPhase(transition.nextPhase)} : ${accountDisplay.label}`;
 
   const confirmed = await confirmProductionAction(env, description);
@@ -129,7 +127,7 @@ export async function forcePhaseTransition(
   if (isFundedTransition) {
     await executeFundedTransition(
       conn, env, operator, kubeAccess, namespace,
-      account, challenge, transition, isUnlimited, bypassFees, accountDisplay
+      account, challenge, transition, bypassFees, accountDisplay
     );
   } else {
     await executePhaseTransition(
@@ -253,7 +251,6 @@ async function executeFundedTransition(
   account: any,
   challenge: any,
   transition: { nextPhase: number; nextServer: string },
-  isUnlimited: boolean,
   bypassFees: boolean,
   accountDisplay: baQ.AccountDisplayInfo
 ): Promise<void> {
@@ -297,11 +294,11 @@ async function executeFundedTransition(
     console.log(simulateResult.logs);
   }
 
-  // Step 2: Process funded activation (standard = always, unlimited = only if bypass)
-  const shouldProcess = !isUnlimited || bypassFees;
-
-  if (shouldProcess) {
-    ui.sectionHeader("Etape 2 — Traitement activation (order + TAM)");
+  // Step 2: Process funded activation only if bypass requested.
+  // Otherwise the pending funded_activation row (149.90 EUR) follows the normal
+  // payment flow (email with payment link, 7 days to pay).
+  if (bypassFees) {
+    ui.sectionHeader("Etape 2 — Bypass des frais d'activation (order + TAM)");
 
     const activation = await faQ.getPendingFundedActivationByTradingAccount(
       conn,
@@ -365,7 +362,7 @@ async function executeFundedTransition(
   console.log("");
   ui.sectionHeader("Recap");
 
-  if (isUnlimited && !bypassFees) {
+  if (!bypassFees) {
     renderKeyValue({
       "Resultat": "Funded activation creee (en attente de paiement)",
       "Montant": "149.90 EUR",
@@ -374,11 +371,10 @@ async function executeFundedTransition(
     });
   } else {
     renderKeyValue({
-      "Resultat": "Passage en funded reussi",
+      "Resultat": "Passage en funded reussi (frais bypasses)",
       "Phase precedente": formatPhase(account.challenge_phase, challenge.type),
       "Phase cible": formatPhase(transition.nextPhase),
       "Compte original": accountDisplay.label,
-      "Frais bypasses": isUnlimited ? "Oui" : "N/A (standard)",
     });
   }
 

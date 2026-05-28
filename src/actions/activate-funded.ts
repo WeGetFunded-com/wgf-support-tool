@@ -253,8 +253,10 @@ export async function activateFunded(
     });
   } else {
     renderKeyValue({
-      "Resultat": "Compte funded standard cree",
-      "Compte original": accountDisplay.label,
+      "Resultat": "Funded activation creee (en attente de paiement)",
+      "Montant": "149.90 EUR",
+      "Action requise": "Le trader doit payer via le lien de paiement envoye par email",
+      "Alternative": "Utilisez 'Bypass des frais d'activation' pour bypasser le paiement",
     });
   }
 
