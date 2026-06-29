@@ -11,6 +11,7 @@ export const PHASE = {
   INSTANT_FUNDED_RULES: 3,
   FUNDED_STANDARD: 4,
   FUNDED_UNLIMITED: 5,
+  CONCOURS: 6,
 } as const;
 
 export type ChallengeType =
@@ -19,7 +20,8 @@ export type ChallengeType =
   | "instant_funded"
   | "funded_standard"
   | "funded_unlimited"
-  | "funded";
+  | "funded"
+  | "concours";
 
 // ── Reason constants (du backend Go watch_controller.go) ──
 
@@ -268,6 +270,7 @@ export const INITIAL_PHASE: Record<string, number> = {
   instant_funded: PHASE.UNLIMITED,
   funded_standard: PHASE.FUNDED_STANDARD,
   funded_unlimited: PHASE.FUNDED_UNLIMITED,
+  concours: PHASE.CONCOURS,
 };
 
 // ── Deactivation reasons (from Go backend) ──

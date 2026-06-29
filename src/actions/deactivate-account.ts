@@ -3,6 +3,7 @@ import type { DatabaseSession } from "../db.js";
 import * as taQ from "../queries/trading-account.queries.js";
 import * as auditLogQ from "../queries/audit-log.queries.js";
 import * as baQ from "../queries/broker-account.queries.js";
+import * as contestQ from "../queries/contest.queries.js";
 import { DEACTIVATION_REASONS } from "../types.js";
 import * as ui from "../ui.js";
 import { searchTradingAccountPrompt, confirmProductionAction } from "../utils/prompts.js";
@@ -53,15 +54,26 @@ export async function deactivateAccount(session: DatabaseSession): Promise<void>
   try {
     await taQ.deactivateAccount(conn, account.trading_account_uuid, reason);
 
+    // Concours: also eliminate the contest entry so the participant leaves the
+    // leaderboard. No-op for non-concours accounts.
+    const eliminatedEntries = await contestQ.eliminateContestEntryByTradingAccount(
+      conn,
+      account.trading_account_uuid
+    );
+
     await auditLogQ.insertAuditLog(conn, "DEACTIVATE_ACCOUNT", "trading_account", account.trading_account_uuid, {
       broker_name: accountDisplay.brokerName,
       account_login: accountDisplay.login,
       phase: account.challenge_phase,
       reason,
+      contest_entry_eliminated: eliminatedEntries > 0,
     }, operator, env);
 
     await conn.commit();
     ui.success(`Compte ${accountDisplay.label} desactive (${reason}).`);
+    if (eliminatedEntries > 0) {
+      ui.info("Entree concours associee marquee comme eliminee.");
+    }
   } catch (err) {
     await conn.rollback();
     throw err;

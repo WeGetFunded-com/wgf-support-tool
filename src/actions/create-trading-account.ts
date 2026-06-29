@@ -20,7 +20,7 @@ import { searchUserPrompt, confirmProductionAction } from "../utils/prompts.js";
 import { renderKeyValue } from "../utils/table.js";
 import { formatPercent, formatCurrency, formatPhase, formatDuration, formatChallengeName, formatBrokerName } from "../utils/format.js";
 import { generateUuid } from "../utils/uuid.js";
-import { runJob, getKubeAccess, generateJobName } from "../kube/index.js";
+import { runJob, getKubeAccess, generateJobName, fetchTamErrorContext } from "../kube/index.js";
 import type { KubeJobSpec } from "../kube/index.js";
 
 function getTamServiceUrl(env: Environment): string {
@@ -185,13 +185,40 @@ export async function createTradingAccount(
   const result = await runJob(kubeAccess, tamSpec);
 
   if (!result.success) {
-    ui.error("Le Job TAM a echoue. Rollback de l'order en cours...");
+    ui.error("Le Job TAM a echoue.");
     if (result.failureReason) ui.warn(`Raison : ${result.failureReason}`);
     if (result.logs) {
-      ui.info("Logs :");
+      ui.info("Logs job (HTTP) :");
       console.log(result.logs);
     }
 
+    // The TAM router flattens every controller error into "Bad Request" in the
+    // HTTP body — the actual cause (Brevo 400, model-command timeout, MT5 down…)
+    // only exists in the TAM pod's structured logs. Pull it back so the
+    // operator sees what really failed before deciding on rollback.
+    try {
+      const tamCtx = await fetchTamErrorContext(kubeAccess, env, orderUuid);
+      if (tamCtx) {
+        ui.info("Erreur TAM detaillee :");
+        console.log(tamCtx.rawError);
+        if (tamCtx.classification === "brevo_mail") {
+          ui.warn("");
+          ui.warn("Echec d'envoi mail Brevo detecte (derniere etape du TAM).");
+          ui.warn("Le compte MT5 et la trading_account sont probablement deja crees");
+          ui.warn("cote DB+broker. Le rollback ci-dessous va echouer sur la FK");
+          ui.warn("trading_account.order_uuid -> verifier l'etat du compte avant");
+          ui.warn("d'agir, et envoyer les credentials manuellement si besoin.");
+          ui.warn("");
+        }
+      } else {
+        ui.warn("Pas de log ERROR TAM trouve pour cet order_uuid (logs rotates ?).");
+      }
+    } catch (logErr) {
+      const e = logErr as { message?: string };
+      ui.warn(`Impossible de recuperer les logs TAM : ${e.message || "erreur inconnue"}`);
+    }
+
+    ui.info("Rollback de l'order en cours...");
     // Cleanup: delete order_options, order, payment
     try {
       await orderQ.deleteOrderOptions(conn, orderUuid);
