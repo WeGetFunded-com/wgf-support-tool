@@ -18,3 +18,14 @@ export async function eliminateContestEntryByTradingAccount(
   const okPacket = result as mysql.ResultSetHeader;
   return okPacket.affectedRows ?? 0;
 }
+
+// deleteContestEntryByOrder removes the contest entry tied to an order. Used by
+// the create-trading-account rollback: a concours order has a contest_entry FK
+// (fk_contest_entry_order) that must be cleared before the order can be deleted.
+// No-op for non-concours orders.
+export async function deleteContestEntryByOrder(conn: Conn, orderUuid: string): Promise<void> {
+  await conn.execute(
+    `DELETE FROM contest_entry WHERE order_uuid = UUID_TO_BIN(?)`,
+    [orderUuid]
+  );
+}

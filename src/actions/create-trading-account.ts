@@ -7,6 +7,7 @@ import * as taQ from "../queries/trading-account.queries.js";
 import * as optionsQ from "../queries/options.queries.js";
 import * as auditLogQ from "../queries/audit-log.queries.js";
 import * as baQ from "../queries/broker-account.queries.js";
+import * as contestQ from "../queries/contest.queries.js";
 import { INITIAL_PHASE, type ChallengeType, type BrokerName } from "../types.js";
 
 // cTrader account creation has been removed from the tool — every new TA is
@@ -184,56 +185,64 @@ export async function createTradingAccount(
   ui.sectionHeader("Job K8s — Creation du compte via TAM");
   const result = await runJob(kubeAccess, tamSpec);
 
+  let welcomeMailMaybeSkipped = false;
   if (!result.success) {
-    ui.error("Le Job TAM a echoue.");
-    if (result.failureReason) ui.warn(`Raison : ${result.failureReason}`);
-    if (result.logs) {
-      ui.info("Logs job (HTTP) :");
-      console.log(result.logs);
-    }
-
-    // The TAM router flattens every controller error into "Bad Request" in the
-    // HTTP body — the actual cause (Brevo 400, model-command timeout, MT5 down…)
-    // only exists in the TAM pod's structured logs. Pull it back so the
-    // operator sees what really failed before deciding on rollback.
-    try {
-      const tamCtx = await fetchTamErrorContext(kubeAccess, env, orderUuid);
-      if (tamCtx) {
-        ui.info("Erreur TAM detaillee :");
-        console.log(tamCtx.rawError);
-        if (tamCtx.classification === "brevo_mail") {
-          ui.warn("");
-          ui.warn("Echec d'envoi mail Brevo detecte (derniere etape du TAM).");
-          ui.warn("Le compte MT5 et la trading_account sont probablement deja crees");
-          ui.warn("cote DB+broker. Le rollback ci-dessous va echouer sur la FK");
-          ui.warn("trading_account.order_uuid -> verifier l'etat du compte avant");
-          ui.warn("d'agir, et envoyer les credentials manuellement si besoin.");
-          ui.warn("");
-        }
-      } else {
-        ui.warn("Pas de log ERROR TAM trouve pour cet order_uuid (logs rotates ?).");
+    // The TA / MT5 / contest_entry may already exist if only a post-creation
+    // step (e.g. the welcome email) failed. Never roll back a real account —
+    // check the DB first.
+    const alreadyCreated = await taQ.getAllTradingAccountsByOrder(conn, orderUuid);
+    if (alreadyCreated.length > 0) {
+      ui.warn("Le TAM a renvoye une erreur, mais le compte est deja cree (echec d'une etape post-creation, ex. email de bienvenue).");
+      ui.warn("Aucun rollback effectue. Envoyer les identifiants MT5 manuellement si l'email n'est pas parti.");
+      welcomeMailMaybeSkipped = true;
+    } else {
+      ui.error("Le Job TAM a echoue.");
+      if (result.failureReason) ui.warn(`Raison : ${result.failureReason}`);
+      if (result.logs) {
+        ui.info("Logs job (HTTP) :");
+        console.log(result.logs);
       }
-    } catch (logErr) {
-      const e = logErr as { message?: string };
-      ui.warn(`Impossible de recuperer les logs TAM : ${e.message || "erreur inconnue"}`);
-    }
 
-    ui.info("Rollback de l'order en cours...");
-    // Cleanup: delete order_options, order, payment
-    try {
-      await orderQ.deleteOrderOptions(conn, orderUuid);
-      await orderQ.deleteOrder(conn, orderUuid);
-      await orderQ.deletePayment(conn, paymentUuid);
-      ui.success("Rollback effectue : order et payment supprimes.");
-    } catch (cleanupErr) {
-      const e = cleanupErr as { message?: string };
-      ui.error(`Echec du rollback : ${e.message || "Erreur inconnue"}`);
-      ui.warn(`Order UUID a nettoyer manuellement : ${orderUuid}`);
+      // The TAM router flattens every controller error into "Bad Request" in the
+      // HTTP body — the actual cause (Brevo 400, model-command timeout, MT5 down…)
+      // only exists in the TAM pod's structured logs. Pull it back so the
+      // operator sees what really failed.
+      try {
+        const tamCtx = await fetchTamErrorContext(kubeAccess, env, orderUuid);
+        if (tamCtx) {
+          ui.info("Erreur TAM detaillee :");
+          console.log(tamCtx.rawError);
+        } else {
+          ui.warn("Pas de log ERROR TAM trouve pour cet order_uuid (logs rotates ?).");
+        }
+      } catch (logErr) {
+        const e = logErr as { message?: string };
+        ui.warn(`Impossible de recuperer les logs TAM : ${e.message || "erreur inconnue"}`);
+      }
+
+      ui.info("Rollback de l'order en cours...");
+      // No trading account was created. Clear the contest_entry first (concours
+      // FK fk_contest_entry_order), then order_options, order, payment.
+      try {
+        await contestQ.deleteContestEntryByOrder(conn, orderUuid);
+        await orderQ.deleteOrderOptions(conn, orderUuid);
+        await orderQ.deleteOrder(conn, orderUuid);
+        await orderQ.deletePayment(conn, paymentUuid);
+        ui.success("Rollback effectue : order et payment supprimes.");
+      } catch (cleanupErr) {
+        const e = cleanupErr as { message?: string };
+        ui.error(`Echec du rollback : ${e.message || "Erreur inconnue"}`);
+        ui.warn(`Order UUID a nettoyer manuellement : ${orderUuid}`);
+      }
+      return;
     }
-    return;
   }
 
-  ui.success(`Compte cree avec succes via TAM (${result.durationSeconds}s).`);
+  if (welcomeMailMaybeSkipped) {
+    ui.success("Compte cree (etape post-creation echouee, voir avertissement ci-dessus).");
+  } else {
+    ui.success(`Compte cree avec succes via TAM (${result.durationSeconds}s).`);
+  }
   if (result.logs) {
     ui.info("Reponse du TAM :");
     console.log(result.logs);
@@ -285,7 +294,9 @@ export async function createTradingAccount(
   };
 
   recapFields["MT5 Login"] = accountLogin;
-  recapFields["Info"] = "Les identifiants MT5 ont ete envoyes par email";
+  recapFields["Info"] = welcomeMailMaybeSkipped
+    ? "Email NON envoye (echec etape TAM) — transmettre les identifiants MT5 manuellement"
+    : "Les identifiants MT5 ont ete envoyes par email";
 
   recapFields["Options"] = selectedOptionNames.length > 0 ? selectedOptionNames.join(", ") : "Aucune";
 
