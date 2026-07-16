@@ -4,6 +4,7 @@ import * as ui from "../ui.js";
 import { searchUserPrompt } from "../utils/prompts.js";
 import { renderKeyValue, renderTable } from "../utils/table.js";
 import { formatDate, formatCurrency, formatPercent, formatChallengeName } from "../utils/format.js";
+import { computeAffiliationBalance } from "../utils/commission.js";
 
 export async function affiliationReport(session: DatabaseSession): Promise<void> {
   const { connection: conn } = session;
@@ -126,19 +127,11 @@ export async function affiliationReport(session: DatabaseSession): Promise<void>
   const salesWithPayment = sales.filter((s) => s.payment_price != null);
   const freeSales = sales.length - salesWithPayment.length;
 
-  const totalRevenue = salesWithPayment.reduce(
-    (sum, s) => sum + Number(s.payment_price) / 100,
-    0
-  );
-  const totalCommission = salesWithPayment.reduce(
-    (sum, s) => sum + (Number(s.payment_price) / 100) * Number(s.percent_profits),
-    0
-  );
+  const { totalRevenue, totalCommission, totalSettled, currentBalance } =
+    await computeAffiliationBalance(sales, settlements);
 
-  const totalSettled = settlements.reduce((sum, s) => sum + Number(s.amount), 0);
-  const currentBalance = totalCommission - totalSettled;
-
-  const currency = salesWithPayment[0]?.payment_currency ?? "EUR";
+  // Balances mix fiat and crypto sales, so everything is normalised to EUR.
+  const currency = "EUR";
   const uniqueBuyers = new Set(sales.map((s) => s.buyer_user_uuid)).size;
 
   renderKeyValue({

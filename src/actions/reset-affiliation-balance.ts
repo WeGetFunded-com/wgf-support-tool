@@ -7,6 +7,7 @@ import { searchUserPrompt, confirmProductionAction } from "../utils/prompts.js";
 import { renderKeyValue } from "../utils/table.js";
 import { formatCurrency } from "../utils/format.js";
 import { generateUuid } from "../utils/uuid.js";
+import { computeAffiliationBalance } from "../utils/commission.js";
 
 export async function resetAffiliationBalance(session: DatabaseSession): Promise<void> {
   const { connection: conn, env, operator } = session;
@@ -25,15 +26,11 @@ export async function resetAffiliationBalance(session: DatabaseSession): Promise
   const sales = await affQ.getSalesByOwner(conn, user.user_uuid);
   const settlements = await affQ.getSettlementsByOwner(conn, user.user_uuid);
 
-  const salesWithPayment = sales.filter((s) => s.payment_price != null);
-  const totalCommission = salesWithPayment.reduce(
-    (sum, s) => sum + (Number(s.payment_price) / 100) * Number(s.percent_profits),
-    0
-  );
-  const totalSettled = settlements.reduce((sum, s) => sum + Number(s.amount), 0);
-  const currentBalance = totalCommission - totalSettled;
+  const { totalCommission, totalSettled, currentBalance } =
+    await computeAffiliationBalance(sales, settlements);
 
-  const currency = salesWithPayment[0]?.payment_currency ?? "EUR";
+  // Balances mix fiat and crypto sales, so everything is normalised to EUR.
+  const currency = "EUR";
 
   ui.sectionHeader(`Solde d'affiliation : ${user.email}`);
   renderKeyValue({
