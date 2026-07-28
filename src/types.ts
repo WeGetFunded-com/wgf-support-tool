@@ -36,6 +36,7 @@ export const REASONS = {
   PROFIT_TARGET_RECALCULATED: "PROFIT_TARGET_RECALCULATED",
   NO_TRADE_HISTORY_ZOMBIE: "NO_TRADE_HISTORY_ZOMBIE",
   TRADER_NOT_FOUND: "TRADER_NOT_FOUND",
+  LIVE_TRANSITION: "LIVE_TRANSITION",
 } as const;
 
 // ── Broker ──
@@ -283,4 +284,5 @@ export const DEACTIVATION_REASONS = [
   { value: REASONS.CHALLENGE_REVIEW, label: "Mis en revue par le support" },
   { value: REASONS.NO_TRADE_HISTORY_ZOMBIE, label: "Compte zombie sans historique" },
   { value: REASONS.TRADER_NOT_FOUND, label: "Trader non trouve sur cTrader" },
+  { value: REASONS.LIVE_TRANSITION, label: "Transition vers compte LIVE" },
 ] as const;
