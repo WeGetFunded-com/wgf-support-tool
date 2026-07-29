@@ -6,3 +6,5 @@ dist/
 .DS_Store
 # Logs de debug locaux
 *.log
+# Sauvegardes prod des backfills (données prod, gardées en local pour rollback)
+scripts/backfill-zombie-*.json
