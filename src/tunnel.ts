@@ -50,18 +50,47 @@ export async function openTunnel(
   env: Environment
 ): Promise<Tunnel> {
   const envConfig = getEnvConfig(config, env);
-  const localPort = await findFreePort();
   const label = env === "staging" ? "Staging" : "Production";
 
-  ui.info(`Ouverture du tunnel vers ${label}...`);
+  return forward(config, env, `pod/${envConfig.podName}`, envConfig.podPort, `tunnel vers ${label}`);
+}
+
+// The MT5 API only answers calls coming from the cluster, so a balance operation
+// has to go through the manager service rather than from this machine.
+export async function openManagerTunnel(
+  config: Config,
+  env: Environment
+): Promise<Tunnel> {
+  const envConfig = getEnvConfig(config, env);
+
+  return forward(
+    config,
+    env,
+    `svc/${envConfig.managerService}`,
+    envConfig.managerPort,
+    "tunnel vers le service manager"
+  );
+}
+
+async function forward(
+  config: Config,
+  env: Environment,
+  target: string,
+  remotePort: number,
+  label: string
+): Promise<Tunnel> {
+  const envConfig = getEnvConfig(config, env);
+  const localPort = await findFreePort();
+
+  ui.info(`Ouverture du ${label}...`);
 
   const args = [
     `--server=${config.kubeServer}`,
     `--token=${config.kubeToken}`,
     "--insecure-skip-tls-verify",
     "port-forward",
-    `pod/${envConfig.podName}`,
-    `${localPort}:${envConfig.podPort}`,
+    target,
+    `${localPort}:${remotePort}`,
     "-n",
     envConfig.namespace,
   ];

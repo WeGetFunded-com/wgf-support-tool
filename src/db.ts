@@ -7,6 +7,7 @@ export interface DatabaseSession {
   connection: mysql.Connection;
   env: Environment;
   operator: string;
+  config: Config;
   close(): Promise<void>;
 }
 
@@ -78,6 +79,7 @@ export async function createSession(
       connection: connRef,
       env,
       operator,
+      config,
       async close() {
         await connRef.end().catch(() => {});
         tunnelRef.close();

@@ -117,9 +117,20 @@ export async function updatePayoutStatus(
   uuid: string,
   status: string
 ): Promise<void> {
+  // validated_at is the payout reset anchor: every eligibility counter (7 positive
+  // days, 14 calendar days, consistency, sub-30s ratio) restarts from it. Stamp it
+  // once, on the first transition to approved or paid, and never move it — the
+  // manager otherwise falls back to updated_at, which shifts on any later edit and
+  // silently re-dates the reset for that trader.
   await conn.execute(
-    `UPDATE payout_request SET status = ?, updated_at = NOW()
-     WHERE payout_request_uuid = UUID_TO_BIN(?)`,
-    [status, uuid]
+    `UPDATE payout_request
+        SET status = ?,
+            updated_at = NOW(),
+            validated_at = CASE
+              WHEN validated_at IS NULL AND ? IN ('approved', 'paid') THEN NOW()
+              ELSE validated_at
+            END
+      WHERE payout_request_uuid = UUID_TO_BIN(?)`,
+    [status, status, uuid]
   );
 }

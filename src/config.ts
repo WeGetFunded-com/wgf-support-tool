@@ -15,6 +15,8 @@ export interface Config {
     namespace: string;
     podName: string;
     podPort: number;
+    managerService: string;
+    managerPort: number;
     database: string;
     user: string;
     password: string;
@@ -23,6 +25,8 @@ export interface Config {
     namespace: string;
     podName: string;
     podPort: number;
+    managerService: string;
+    managerPort: number;
     database: string;
     user: string;
     password: string;
@@ -75,6 +79,8 @@ export function loadConfig(): Config {
       namespace: parsed["STAGING_NAMESPACE"],
       podName: parsed["STAGING_POD_NAME"],
       podPort: parseInt(parsed["STAGING_POD_PORT"], 10),
+      managerService: parsed["STAGING_MANAGER_SERVICE"] || "staging-trading-account-manager",
+      managerPort: parseInt(parsed["STAGING_MANAGER_PORT"] || "80", 10),
       database: parsed["STAGING_DB_NAME"],
       user: parsed["STAGING_DB_USER"],
       password: parsed["STAGING_DB_PASSWORD"],
@@ -83,6 +89,8 @@ export function loadConfig(): Config {
       namespace: parsed["PRODUCTION_NAMESPACE"],
       podName: parsed["PRODUCTION_POD_NAME"],
       podPort: parseInt(parsed["PRODUCTION_POD_PORT"], 10),
+      managerService: parsed["PRODUCTION_MANAGER_SERVICE"] || "production-trading-account-manager",
+      managerPort: parseInt(parsed["PRODUCTION_MANAGER_PORT"] || "80", 10),
       database: parsed["PRODUCTION_DB_NAME"],
       user: parsed["PRODUCTION_DB_USER"],
       password: parsed["PRODUCTION_DB_PASSWORD"],

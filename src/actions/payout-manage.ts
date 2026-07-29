@@ -7,6 +7,7 @@ import * as ui from "../ui.js";
 import { confirmProductionAction } from "../utils/prompts.js";
 import { renderKeyValue } from "../utils/table.js";
 import { formatDate, formatCurrency } from "../utils/format.js";
+import { settlePayout } from "../manager-client.js";
 
 export async function payoutManage(session: DatabaseSession): Promise<void> {
   const { connection: conn, env, operator } = session;
@@ -98,15 +99,50 @@ async function handlePayoutSelection(
     return;
   }
 
+  // Paying is not a status change: the money has to leave the trader's MT5 account
+  // in the same operation. The manager does both, and refuses the status change if
+  // MT5 rejects the withdrawal — so a payout can never be marked paid while the
+  // balance still shows the money.
+  let settlement: Awaited<ReturnType<typeof settlePayout>> | null = null;
+  if (action === "paid") {
+    try {
+      settlement = await settlePayout(
+        session.config,
+        env,
+        payout.trading_account_uuid,
+        payout.payout_request_uuid
+      );
+    } catch (err) {
+      ui.error(
+        `Retrait MT5 refuse : ${err instanceof Error ? err.message : String(err)}`
+      );
+      ui.info("Le payout n'a pas ete modifie. Verifiez le compte MT5 puis reessayez.");
+      return;
+    }
+
+    if (settlement.alreadySettled) {
+      ui.warn("Ce payout etait deja regle : aucune operation MT5 n'a ete rejouee.");
+    } else {
+      ui.success(
+        `Retrait MT5 effectue : ${formatCurrency(settlement.debitedAmount ?? 0)} ` +
+          `sur le compte ${settlement.mt5Login} (ticket ${settlement.mt5Ticket}).`
+      );
+    }
+  }
+
   await conn.beginTransaction();
   try {
-    await payoutQ.updatePayoutStatus(conn, payout.payout_request_uuid, action);
+    if (action !== "paid") {
+      await payoutQ.updatePayoutStatus(conn, payout.payout_request_uuid, action);
+    }
 
     await auditLogQ.insertAuditLog(conn, "PAYOUT_STATUS_CHANGE", "payout_request", payout.payout_request_uuid, {
       email: payout.email,
       amount: payout.payout_amount,
       old_status: payout.status,
       new_status: action,
+      mt5_ticket: settlement?.mt5Ticket ?? null,
+      mt5_login: settlement?.mt5Login ?? null,
     }, operator, env);
 
     if (action === "paid") {
