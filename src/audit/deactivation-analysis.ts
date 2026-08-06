@@ -26,9 +26,16 @@ export async function deactivationAnalysis(
   const account = await searchTradingAccountPrompt(conn);
   if (!account) return;
 
-  // 2. Check if deactivated
+  // 2. Check if deactivated.
+  //    success: null = actif (challenge en cours) | 1 = reussi | 0 = echoue (desactive)
+  //    Seul success === 0 correspond a une desactivation. On distingue les deux
+  //    autres cas pour ne pas melanger "actif" et "reussi" dans un seul message.
   if (account.success !== 0) {
-    ui.warn("Ce compte n'est pas desactive (success != 0).");
+    if (account.success === 1) {
+      ui.warn("Ce compte n'est pas desactive : le challenge a ete reussi (success = 1).");
+    } else {
+      ui.warn("Ce compte n'est pas desactive : le challenge est encore actif / en cours (success = null).");
+    }
     return;
   }
 
