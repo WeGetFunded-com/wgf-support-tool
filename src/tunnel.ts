@@ -72,6 +72,21 @@ export async function openManagerTunnel(
   );
 }
 
+export async function openModelCommandTunnel(
+  config: Config,
+  env: Environment
+): Promise<Tunnel> {
+  const envConfig = getEnvConfig(config, env);
+
+  return forward(
+    config,
+    env,
+    `svc/${envConfig.modelCommandService}`,
+    envConfig.modelCommandPort,
+    "tunnel vers le service model-command"
+  );
+}
+
 async function forward(
   config: Config,
   env: Environment,

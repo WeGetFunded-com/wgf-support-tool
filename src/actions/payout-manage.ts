@@ -1,4 +1,4 @@
-import { select } from "@inquirer/prompts";
+import { input, select } from "@inquirer/prompts";
 import type { DatabaseSession } from "../db.js";
 import * as payoutQ from "../queries/payout.queries.js";
 import * as tradingAccountQ from "../queries/trading-account.queries.js";
@@ -8,6 +8,14 @@ import { confirmProductionAction } from "../utils/prompts.js";
 import { renderKeyValue } from "../utils/table.js";
 import { formatDate, formatCurrency } from "../utils/format.js";
 import { settlePayout } from "../manager-client.js";
+import { decidePayout } from "../model-command-client.js";
+
+/**
+ * `--force-sql` keeps the legacy direct UPDATE as an escape hatch when
+ * model-command is unreachable. It skips the tracking emission: the event
+ * will only come back through the reconciliation cron.
+ */
+const FORCE_SQL = process.argv.includes("--force-sql");
 
 export async function payoutManage(session: DatabaseSession): Promise<void> {
   const { connection: conn, env, operator } = session;
@@ -89,6 +97,13 @@ async function handlePayoutSelection(
 
   if (action === "cancel") return;
 
+  let rejectionReason = "";
+  if (action === "rejected") {
+    rejectionReason = (
+      await input({ message: "Motif du rejet (transmis au tracking, garde en audit) :" })
+    ).trim();
+  }
+
   const description =
     `Changer le statut du payout ${payout.payout_request_uuid.slice(0, 8)}... ` +
     `de "${payout.status}" a "${action}" (${payout.email}, ${formatCurrency(payout.payout_amount)})`;
@@ -130,9 +145,29 @@ async function handlePayoutSelection(
     }
   }
 
+  // Approve / reject go through model-command, which owns the status flip and
+  // emits payout_approved / payout_rejected. A direct UPDATE would silently
+  // skip the event (it used to).
+  let via: "model-command" | "sql" | "manager" = "manager";
+  if (action === "approved" || action === "rejected") {
+    if (FORCE_SQL) {
+      ui.warn("--force-sql : mise a jour directe en base, aucun evenement de tracking emis.");
+      via = "sql";
+    } else {
+      try {
+        await decidePayout(session.config, env, payout.payout_request_uuid, action, rejectionReason);
+        via = "model-command";
+      } catch (err) {
+        ui.error(`model-command injoignable : ${err instanceof Error ? err.message : String(err)}`);
+        ui.info("Le payout n'a pas ete modifie. Relancez avec --force-sql pour ecrire directement en base (sans tracking).");
+        return;
+      }
+    }
+  }
+
   await conn.beginTransaction();
   try {
-    if (action !== "paid") {
+    if (via === "sql") {
       await payoutQ.updatePayoutStatus(conn, payout.payout_request_uuid, action);
     }
 
@@ -143,6 +178,8 @@ async function handlePayoutSelection(
       new_status: action,
       mt5_ticket: settlement?.mt5Ticket ?? null,
       mt5_login: settlement?.mt5Login ?? null,
+      rejection_reason: action === "rejected" ? rejectionReason : null,
+      via,
     }, operator, env);
 
     if (action === "paid") {
