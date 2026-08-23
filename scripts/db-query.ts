@@ -97,6 +97,37 @@ async function main() {
   const dbUser = parsed[`${prefix}_DB_USER`];
   const dbPassword = parsed[`${prefix}_DB_PASSWORD`];
 
+  // Direct mode (OVH managed MySQL, TLS with the OVH CA): no kubectl tunnel.
+  // Enabled when <PREFIX>_DB_HOST is set. Used by production since the 23/08/2026 migration.
+  const directHost = parsed[`${prefix}_DB_HOST`];
+  if (directHost) {
+    const directPort = Number(parsed[`${prefix}_DB_PORT`] ?? 3306);
+    const caPath = parsed[`${prefix}_DB_SSL_CA`];
+    console.error(`[db-query] Direct connection to ${env} (${directHost}:${directPort}, TLS)...`);
+    let connection: mysql.Connection | null = null;
+    try {
+      connection = await mysql.createConnection({
+        host: directHost,
+        port: directPort,
+        user: dbUser,
+        password: dbPassword,
+        database: dbName,
+        connectTimeout: 15000,
+        ssl: caPath && existsSync(caPath) ? { ca: readFileSync(caPath, "utf-8") } : { rejectUnauthorized: false },
+      });
+      console.error(`[db-query] Connected. Executing query...`);
+      const [rows] = await connection.execute(query);
+      console.log(JSON.stringify(rows, null, 2));
+    } catch (err) {
+      console.error(`ERROR: ${(err as Error).message}`);
+      process.exit(1);
+    } finally {
+      if (connection) await connection.end().catch(() => {});
+    }
+    console.error("[db-query] Done.");
+    return;
+  }
+
   // Open tunnel
   const localPort = await findFreePort();
   console.error(`[db-query] Opening tunnel to ${env} on local port ${localPort}...`);
