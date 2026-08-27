@@ -14,6 +14,18 @@ export function formatCurrency(amount: number | string | null | undefined, curre
   return `${n.toFixed(2)} ${currency}`;
 }
 
+// formatOptionAmount shows an option's price: a fixed amount (e.g. One Time
+// Payment) when it has a flat price, otherwise its percentage majoration.
+export function formatOptionAmount(
+  majorationPercent: number | string | null | undefined,
+  flatPrice: number | string | null | undefined
+): string {
+  if (flatPrice != null && Number(flatPrice) > 0) {
+    return formatCurrency(flatPrice);
+  }
+  return formatPercent(majorationPercent);
+}
+
 export function formatDate(date: Date | string | null | undefined): string {
   if (!date) return "N/A";
   const d = date instanceof Date ? date : new Date(date);

@@ -8,7 +8,7 @@ import * as baQ from "../queries/broker-account.queries.js";
 import * as ui from "../ui.js";
 import { searchTradingAccountPrompt, confirmProductionAction } from "../utils/prompts.js";
 import { renderTable } from "../utils/table.js";
-import { formatPercent } from "../utils/format.js";
+import { formatOptionAmount } from "../utils/format.js";
 
 export async function manageOptions(session: DatabaseSession): Promise<void> {
   const { connection: conn, env, operator } = session;
@@ -26,8 +26,8 @@ export async function manageOptions(session: DatabaseSession): Promise<void> {
 
   if (currentOptions.length > 0) {
     renderTable(
-      ["Nom", "Majoration"],
-      currentOptions.map((o) => [o.name, formatPercent(o.majoration_percent)])
+      ["Nom", "Prix"],
+      currentOptions.map((o) => [o.name, formatOptionAmount(o.majoration_percent, o.flat_price)])
     );
   } else {
     ui.info("Aucune option sur ce compte.");
@@ -56,7 +56,7 @@ export async function manageOptions(session: DatabaseSession): Promise<void> {
     const optionIdx = await select({
       message: "Option a ajouter :",
       choices: available.map((o, i) => ({
-        name: `${o.name} (majoration: ${formatPercent(o.majoration_percent)})`,
+        name: `${o.name} (${formatOptionAmount(o.majoration_percent, o.flat_price)})`,
         value: i,
       })),
     });
@@ -99,7 +99,7 @@ export async function manageOptions(session: DatabaseSession): Promise<void> {
     const optionIdx = await select({
       message: "Option a retirer :",
       choices: currentOptions.map((o, i) => ({
-        name: `${o.name} (majoration: ${formatPercent(o.majoration_percent)})`,
+        name: `${o.name} (${formatOptionAmount(o.majoration_percent, o.flat_price)})`,
         value: i,
       })),
     });

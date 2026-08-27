@@ -5,6 +5,7 @@ import { PHASE, PHASE_TRANSITIONS, REASONS } from "../types.js";
 import * as challengeQ from "../queries/challenge.queries.js";
 import * as taQ from "../queries/trading-account.queries.js";
 import * as faQ from "../queries/funded-activation.queries.js";
+import * as optionsQ from "../queries/options.queries.js";
 import * as auditLogQ from "../queries/audit-log.queries.js";
 import * as baQ from "../queries/broker-account.queries.js";
 import * as ui from "../ui.js";
@@ -72,6 +73,12 @@ export async function forcePhaseTransition(
 
   const isFundedTransition = FUNDED_PHASES.has(transition.nextPhase);
 
+  // One Time Payment pre-pays the activation at purchase: the funded is created
+  // directly, with no funded_activation and no 149.90 EUR fee.
+  const hasOTP = isFundedTransition
+    ? await optionsQ.orderHasOptionByName(conn, account.order_uuid, optionsQ.OTP_OPTION_NAME)
+    : false;
+
   // 5. Preview
   ui.sectionHeader("Forcer le passage de phase");
 
@@ -85,11 +92,20 @@ export async function forcePhaseTransition(
     "Phase cible": formatPhase(transition.nextPhase),
     "Serveur cible": transition.nextServer === "live" ? "LIVE" : "Demo",
     "Type de transition": isFundedTransition ? "Funded (via simulate/funded)" : "Phase suivante (via TAM)",
+    ...(isFundedTransition
+      ? { "Frais d'activation": hasOTP ? "Aucun (option One Time Payment)" : "149.90 EUR" }
+      : {}),
   });
 
-  // 5. For funded transition: ask about fees (standard + unlimited both have 149.90 EUR activation fees)
+  // 5. For funded transition without OTP: ask about the 149.90 EUR activation
+  // fee. With OTP the funded is created directly (no fee), so skip the prompt.
   let bypassFees = false;
-  if (isFundedTransition) {
+  if (isFundedTransition && hasOTP) {
+    console.log("");
+    ui.info(
+      "Ce compte a l'option One Time Payment : passage en funded direct, aucun frais d'activation."
+    );
+  } else if (isFundedTransition) {
     console.log("");
     ui.info(
       "Le passage en funded necessite 149.90 EUR de frais d'activation."
@@ -114,7 +130,7 @@ export async function forcePhaseTransition(
   // 6. Confirm
   const description = isFundedTransition
     ? `Forcer le passage en ${formatPhase(transition.nextPhase)} : ${accountDisplay.label}` +
-      (bypassFees ? " (frais bypasses)" : "")
+      (hasOTP ? " (One Time Payment — funded direct)" : bypassFees ? " (frais bypasses)" : "")
     : `Forcer le passage en ${formatPhase(transition.nextPhase)} : ${accountDisplay.label}`;
 
   const confirmed = await confirmProductionAction(env, description);
@@ -127,7 +143,7 @@ export async function forcePhaseTransition(
   if (isFundedTransition) {
     await executeFundedTransition(
       conn, env, operator, kubeAccess, namespace,
-      account, challenge, transition, bypassFees, accountDisplay
+      account, challenge, transition, bypassFees, hasOTP, accountDisplay
     );
   } else {
     await executePhaseTransition(
@@ -252,6 +268,7 @@ async function executeFundedTransition(
   challenge: any,
   transition: { nextPhase: number; nextServer: string },
   bypassFees: boolean,
+  hasOTP: boolean,
   accountDisplay: baQ.AccountDisplayInfo
 ): Promise<void> {
   // Step 1: Call watcher simulate/funded
@@ -355,6 +372,7 @@ async function executeFundedTransition(
     from_phase: account.challenge_phase,
     to_phase: transition.nextPhase,
     bypass_fees: bypassFees,
+    otp: hasOTP,
     simulate_duration: simulateResult.durationSeconds,
   }, operator, env);
 
@@ -362,7 +380,15 @@ async function executeFundedTransition(
   console.log("");
   ui.sectionHeader("Recap");
 
-  if (!bypassFees) {
+  if (hasOTP) {
+    renderKeyValue({
+      "Resultat": "Passage en funded direct (One Time Payment)",
+      "Frais d'activation": "Aucun (pre-paye a l'achat)",
+      "Phase precedente": formatPhase(account.challenge_phase, challenge.type),
+      "Phase cible": formatPhase(transition.nextPhase),
+      "Compte original": accountDisplay.label,
+    });
+  } else if (!bypassFees) {
     renderKeyValue({
       "Resultat": "Funded activation creee (en attente de paiement)",
       "Montant": "149.90 EUR",

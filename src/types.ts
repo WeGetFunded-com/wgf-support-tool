@@ -205,6 +205,7 @@ export interface DbOption {
   option_uuid: string;
   name: string;
   majoration_percent: number;
+  flat_price: number;
 }
 
 export interface DbFundedActivation {
