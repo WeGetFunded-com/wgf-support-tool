@@ -1,6 +1,7 @@
 import type { DatabaseSession } from "../db.js";
 import * as taQ from "../queries/trading-account.queries.js";
 import * as challengeQ from "../queries/challenge.queries.js";
+import * as btfQ from "../queries/back-to-funded.queries.js";
 import * as tradeHistoryQ from "../queries/trade-history.queries.js";
 import * as baQ from "../queries/broker-account.queries.js";
 import * as ui from "../ui.js";
@@ -62,6 +63,28 @@ export async function tradingAccountReport(session: DatabaseSession): Promise<vo
       ["Nom", "Majoration"],
       options.map((o) => [o.name, formatPercent(o.majoration_percent)])
     );
+  }
+
+  // ── Offre Back to Funded ──
+  const backToFunded = await btfQ.getBackToFundedByAccount(conn, account.trading_account_uuid);
+  if (backToFunded) {
+    const profitSplitOption = options.find(
+      (o) => o.name === "90/10 Split" || o.name === "100/0 Split"
+    );
+    ui.sectionHeader("Offre Back to Funded");
+    renderKeyValue({
+      "Offer UUID": backToFunded.offer_uuid,
+      "Statut": backToFunded.status,
+      "Prix challenge de base (catalogue)": formatCurrency(backToFunded.base_challenge_price, backToFunded.currency),
+      "Majoration option": profitSplitOption
+        ? `${formatPercent(profitSplitOption.majoration_percent)} (${profitSplitOption.name})`
+        : "Aucune",
+      "Montant": formatCurrency(backToFunded.amount, backToFunded.currency),
+      "Creee le": formatDate(backToFunded.created_at),
+      "Expire le": formatDate(backToFunded.expires_at),
+      "Payee le": backToFunded.paid_at ? formatDate(backToFunded.paid_at) : "-",
+      "Lien de paiement": backToFunded.payment_link || "-",
+    });
   }
 
   // ── Regles du challenge pour cette phase ──

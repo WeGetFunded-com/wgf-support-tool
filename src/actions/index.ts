@@ -5,6 +5,7 @@ import { createTradingAccount } from "./create-trading-account.js";
 import { fixProfitTarget } from "./fix-profit-target.js";
 import { activateFunded } from "./activate-funded.js";
 import { bypassActivationFees } from "./bypass-activation-fees.js";
+import { processBackToFunded } from "./process-back-to-funded.js";
 import { deactivateAccount } from "./deactivate-account.js";
 import { payoutManage } from "./payout-manage.js";
 import { reactivateAccount } from "./reactivate-account.js";
@@ -22,6 +23,7 @@ type ActionChoice =
   | "fix_profit_target"
   | "activate_funded"
   | "bypass_activation_fees"
+  | "process_back_to_funded"
   | "force_phase_transition"
   | "deactivate_account"
   | "payout_manage"
@@ -46,6 +48,7 @@ export async function actionsMenu(session: DatabaseSession, config: Config): Pro
         { name: "Corriger le profit target d'un compte", value: "fix_profit_target" },
         { name: "Activation d'un Funded depuis un compte existant", value: "activate_funded" },
         { name: "Bypass des frais d'activation", value: "bypass_activation_fees" },
+        { name: "Traiter une offre Back to Funded (bypass paiement)", value: "process_back_to_funded" },
         { name: "Forcer le passage de phase", value: "force_phase_transition" },
         { name: "Desactiver un compte de trading", value: "deactivate_account" },
         { name: "Gerer une demande de payout", value: "payout_manage" },
@@ -75,6 +78,9 @@ export async function actionsMenu(session: DatabaseSession, config: Config): Pro
           break;
         case "bypass_activation_fees":
           await bypassActivationFees(session, config);
+          break;
+        case "process_back_to_funded":
+          await processBackToFunded(session, config);
           break;
         case "force_phase_transition":
           await forcePhaseTransition(session, config);

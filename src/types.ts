@@ -224,6 +224,23 @@ export interface DbFundedActivation {
   expires_at: Date;
 }
 
+export interface DbBackToFunded {
+  offer_uuid: string;
+  user_uuid: string;
+  breached_account_uuid: string;
+  original_order_uuid: string;
+  funded_challenge_uuid: string;
+  base_challenge_price: number;
+  amount: number;
+  currency: string;
+  geidea_invoice_id: string | null;
+  payment_link: string | null;
+  status: string;
+  created_at: Date;
+  paid_at: Date | null;
+  expires_at: Date;
+}
+
 export interface DbAuditLog {
   id: number;
   action_type: string;
