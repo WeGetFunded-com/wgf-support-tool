@@ -1,6 +1,6 @@
 {
   "name": "wgf-support-shell",
-  "version": "1.8.0",
+  "version": "1.7.8",
   "description": "Outil CLI de support WeGetFunded — connexion BDD simplifiée",
   "type": "module",
   "scripts": {
