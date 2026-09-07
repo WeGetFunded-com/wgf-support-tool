@@ -8,6 +8,8 @@ import { bypassActivationFees } from "./bypass-activation-fees.js";
 import { processBackToFunded } from "./process-back-to-funded.js";
 import { deactivateAccount } from "./deactivate-account.js";
 import { payoutManage } from "./payout-manage.js";
+import { simulatePayout } from "./simulate-payout.js";
+import { deleteSimulatedPayout } from "./delete-simulated-payout.js";
 import { reactivateAccount } from "./reactivate-account.js";
 import { createPromo } from "./create-promo.js";
 import { manageOptions } from "./manage-options.js";
@@ -27,6 +29,8 @@ type ActionChoice =
   | "force_phase_transition"
   | "deactivate_account"
   | "payout_manage"
+  | "simulate_payout"
+  | "delete_simulated_payout"
   | "reactivate_account"
   | "create_promo"
   | "manage_options"
@@ -52,6 +56,8 @@ export async function actionsMenu(session: DatabaseSession, config: Config): Pro
         { name: "Forcer le passage de phase", value: "force_phase_transition" },
         { name: "Desactiver un compte de trading", value: "deactivate_account" },
         { name: "Gerer une demande de payout", value: "payout_manage" },
+        { name: "Simuler un payout sur un compte", value: "simulate_payout" },
+        { name: "Supprimer une demande de payout simulee", value: "delete_simulated_payout" },
         { name: "Reactiver un compte", value: "reactivate_account" },
         { name: "Creer un code promo", value: "create_promo" },
         { name: "Gerer les options d'un compte", value: "manage_options" },
@@ -90,6 +96,12 @@ export async function actionsMenu(session: DatabaseSession, config: Config): Pro
           break;
         case "payout_manage":
           await payoutManage(session);
+          break;
+        case "simulate_payout":
+          await simulatePayout(session, config);
+          break;
+        case "delete_simulated_payout":
+          await deleteSimulatedPayout(session);
           break;
         case "reactivate_account":
           await reactivateAccount(session);

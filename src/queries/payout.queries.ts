@@ -134,3 +134,71 @@ export async function updatePayoutStatus(
     [status, status, uuid]
   );
 }
+
+/**
+ * Payout requests this tool created itself, newest first.
+ *
+ * Provenance comes from admin_audit_log rather than from a column on
+ * payout_request: the table is written by the manager and has no notion of a
+ * simulation. Matching the PAYOUT_SIMULATED entry we wrote at creation is what
+ * makes a genuine trader request impossible to delete by mistake — no audit
+ * entry, not in this list. EXISTS rather than a join: the audit log has no
+ * unique key on the target, and a join would both duplicate rows and need a
+ * GROUP BY that ONLY_FULL_GROUP_BY would reject.
+ *
+ * Scoped to the current environment, so a staging simulation can never surface
+ * while connected to production.
+ */
+export async function getSimulatedPayouts(
+  conn: Conn,
+  environment: string
+): Promise<PayoutWithEmail[]> {
+  const [rows] = await conn.execute(
+    `SELECT
+       BIN_TO_UUID(pr.payout_request_uuid) as payout_request_uuid,
+       BIN_TO_UUID(pr.user_uuid) as user_uuid,
+       BIN_TO_UUID(pr.trading_account_uuid) as trading_account_uuid,
+       pr.payout_method, pr.iban, pr.wallet_address, pr.wallet_protocol,
+       pr.first_name, pr.last_name, pr.postal_address,
+       pr.balance_before_request, pr.total_profit, pr.payout_amount,
+       pr.profit_split, pr.status, pr.created_at, pr.updated_at,
+       u.email,
+       ${PAYOUT_BROKER_COLS}
+     FROM payout_request pr
+     JOIN user u ON pr.user_uuid = u.user_uuid
+     ${PAYOUT_BROKER_JOIN}
+     WHERE EXISTS (
+       SELECT 1 FROM admin_audit_log al
+        WHERE al.target_uuid = pr.payout_request_uuid
+          AND al.action_type = 'PAYOUT_SIMULATED'
+          AND al.environment = ?
+     )
+     ORDER BY pr.created_at DESC
+     LIMIT 50`,
+    [environment]
+  );
+  return rows as PayoutWithEmail[];
+}
+
+/**
+ * Deletes a payout request. Guarded by status: a paid request is never
+ * deletable, because the money already left MT5 and this row is the only trace
+ * of it in the database.
+ *
+ * The status is re-checked in the WHERE clause rather than trusted from the
+ * caller's earlier read: the operator sits in front of a prompt, and a trader
+ * request can reach 'paid' between the moment the list was drawn and the moment
+ * he confirms.
+ */
+export async function deleteSimulatedPayout(
+  conn: Conn,
+  payoutRequestUuid: string
+): Promise<number> {
+  const [result] = await conn.execute(
+    `DELETE FROM payout_request
+      WHERE payout_request_uuid = UUID_TO_BIN(?)
+        AND status <> 'paid'`,
+    [payoutRequestUuid]
+  );
+  return (result as { affectedRows: number }).affectedRows;
+}

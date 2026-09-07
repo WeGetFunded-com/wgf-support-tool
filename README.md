@@ -82,6 +82,8 @@ En production, chaque action demande une confirmation explicite.
 | **Bypass des frais d'activation** | Active un funded sans facturer les 149.90 EUR. | Recherche une funded_activation en statut "pending", puis lance un Job K8s qui appelle le service order pour traiter l'activation sans paiement. |
 | **Desactiver un compte** | Desactive un compte de trading actif. | Choix du motif de desactivation, puis mise a jour du statut en DB (success = 0). |
 | **Gerer une demande de payout** | Approve, rejette ou marque un payout comme paye. | Affiche les payouts pending (ou d'un autre statut), detail complet (IBAN, wallet, montant), et change le statut. |
+| **Simuler un payout sur un compte** | Affiche l'eligibilite au payout d'un compte, puis permet de creer la demande a la place du trader. | Interroge le manager pour les 4 regles (7 jours positifs, 14 jours depuis le 1er trade, consistency, ratio de trades < 30 s) et le montant demandable, puis cree la demande si demande — avec possibilite de forcer sur un compte non eligible. Ne couvre que les comptes funded. Aucun email n'est envoye au trader. |
+| **Supprimer une demande de payout simulee** | Nettoie une demande creee par l'outil. | Ne liste que les demandes portant une trace `PAYOUT_SIMULATED` dans l'audit : une vraie demande de trader ne peut pas etre supprimee. Refuse les demandes deja payees. |
 | **Reactiver un compte** | Reactive un compte desactive. | Remet le compte en actif (success = null, reason vide). Propose optionnellement de reajuster le profit target. |
 | **Creer un code promo** | Cree un nouveau code promo. | Configuration complete : pourcentage, global/personnel, usage unique/illimite, liaison a un challenge ou utilisateur, date d'expiration, ID Stripe, descriptions multilingues. |
 | **Gerer les options d'un compte** | Ajoute ou retire une option sur un compte. | Affiche les options actuelles, permet d'en ajouter (parmi celles disponibles) ou d'en retirer. |
@@ -112,6 +114,8 @@ Menu principal
               |-- Bypass des frais d'activation
               |-- Desactiver un compte
               |-- Gerer une demande de payout
+              |-- Simuler un payout sur un compte
+              |-- Supprimer une demande de payout simulee
               |-- Reactiver un compte
               |-- Creer un code promo
               |-- Gerer les options d'un compte

@@ -67,6 +67,8 @@ src/
     ├── deactivate-account.ts
     ├── reactivate-account.ts
     ├── payout-manage.ts
+    ├── simulate-payout.ts       # Diagnostic d'eligibilite + creation d'une demande
+    ├── delete-simulated-payout.ts
     ├── create-promo.ts
     ├── manage-options.ts
     └── update-ctrader-id.ts
