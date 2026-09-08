@@ -13,7 +13,8 @@ const TA_COLS = `
   ta.number_of_won_trades, ta.number_of_lost_trades,
   ta.win_sum, ta.loss_sum, ta.max_trading_day,
   ta.latest_update, ta.reason,
-  BIN_TO_UUID(ta.promo_uuid) as promo_uuid
+  BIN_TO_UUID(ta.promo_uuid) as promo_uuid,
+  ta.drawdown_reset_at
 `;
 
 export async function getTradingAccountByUuid(
@@ -104,7 +105,7 @@ export async function getTradingAccountOptions(
   taUuid: string
 ): Promise<DbOption[]> {
   const [rows] = await conn.execute(
-    `SELECT BIN_TO_UUID(o.option_uuid) as option_uuid, o.name, o.majoration_percent
+    `SELECT BIN_TO_UUID(o.option_uuid) as option_uuid, o.name, o.majoration_percent, o.flat_price
      FROM trading_account_options tao
      JOIN options o ON tao.option_uuid = o.option_uuid
      WHERE tao.trading_account_uuid = UUID_TO_BIN(?)`,

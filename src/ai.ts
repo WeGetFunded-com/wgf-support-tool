@@ -181,6 +181,10 @@ Pour unlimited/funded_unlimited crees apres le 15 mars 2026 :
 - One Day to Pass : bypass recalcul + bypass min jours (unlimited uniquement)
 - Second Chance : en cas d'echec, cree automatiquement un nouveau compte
 - Profit Split 90/10 ou 100/0 : herite dans les funded
+- Extended Drawdown 1% / 2% / 3% : ajoute 1 a 3 points au max_daily_drawdown_percent
+  (DDJ du standard/funded_standard, trailing 4% de l'unlimited/funded_unlimited).
+  Pas sur instant_funded. Herite dans les funded. Prend fin au premier payout
+  (drawdown_reset_at pose) : le compte revient au drawdown par defaut.
 
 Quand tu analyses un compte, tu dois :
 1. Identifier la raison exacte de desactivation

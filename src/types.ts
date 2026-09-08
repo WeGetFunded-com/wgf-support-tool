@@ -123,6 +123,7 @@ export interface DbTradingAccount {
   latest_update: Date;
   reason: string;
   promo_uuid: string | null;
+  drawdown_reset_at: Date | null;
 }
 
 export interface DbTradingAccountBalance {

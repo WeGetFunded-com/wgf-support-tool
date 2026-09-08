@@ -7,6 +7,7 @@ import * as ui from "../ui.js";
 import { confirmProductionAction } from "../utils/prompts.js";
 import { renderKeyValue } from "../utils/table.js";
 import { formatDate, formatCurrency } from "../utils/format.js";
+import { extendedDrawdownPoints } from "../utils/extended-drawdown.js";
 import { settlePayout } from "../manager-client.js";
 import { decidePayout } from "../model-command-client.js";
 
@@ -195,6 +196,11 @@ async function handlePayoutSelection(
     ui.success(`Payout mis a jour : ${action}`);
     if (action === "paid") {
       ui.info("Drawdown floor verrouille a l'initial_amount pour ce compte.");
+      const accountOptions = await tradingAccountQ.getTradingAccountOptions(conn, payout.trading_account_uuid);
+      const extendedPoints = extendedDrawdownPoints(accountOptions);
+      if (extendedPoints > 0) {
+        ui.info(`Option Extended Drawdown ${extendedPoints}% : l'extension prend fin avec ce premier payout, le compte revient au drawdown par defaut.`);
+      }
     }
   } catch (err) {
     await conn.rollback();

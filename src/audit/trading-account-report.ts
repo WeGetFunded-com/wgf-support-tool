@@ -10,7 +10,9 @@ import { renderKeyValue, renderTable } from "../utils/table.js";
 import {
   formatDate, formatPhase, formatPercent, formatSuccess,
   formatServer, formatCurrency, formatDuration, formatBoolean, formatChallengeName,
+  formatOptionAmount,
 } from "../utils/format.js";
+import { describeDailyDrawdown, extendedDrawdownPoints } from "../utils/extended-drawdown.js";
 
 export async function tradingAccountReport(session: DatabaseSession): Promise<void> {
   const { connection: conn } = session;
@@ -60,8 +62,8 @@ export async function tradingAccountReport(session: DatabaseSession): Promise<vo
   if (options.length > 0) {
     ui.sectionHeader("Options");
     renderTable(
-      ["Nom", "Majoration"],
-      options.map((o) => [o.name, formatPercent(o.majoration_percent)])
+      ["Nom", "Prix"],
+      options.map((o) => [o.name, formatOptionAmount(o.majoration_percent, o.flat_price)])
     );
   }
 
@@ -96,13 +98,18 @@ export async function tradingAccountReport(session: DatabaseSession): Promise<vo
     );
     if (rules) {
       ui.sectionHeader("Regles de la phase");
+      const extendedPoints = extendedDrawdownPoints(options);
       renderKeyValue({
         "Profit Target": formatPercent(rules.profit_target_percent),
-        "Max Daily Drawdown": formatPercent(rules.max_daily_drawdown_percent),
+        "Max Daily Drawdown": describeDailyDrawdown(
+          rules.max_daily_drawdown_percent, extendedPoints, account.drawdown_reset_at
+        ),
         "Max Total Drawdown": rules.max_total_drawdown_percent != null
           ? formatPercent(rules.max_total_drawdown_percent) : "Illimite",
         "Min Trading Days": String(rules.min_trading_days),
         "Duree phase": formatDuration(rules.phase_duration),
+        "Drawdown reset (payout)": account.drawdown_reset_at
+          ? `${formatDate(account.drawdown_reset_at)} (plancher verrouille au capital initial)` : "-",
       });
     }
   }
