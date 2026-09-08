@@ -70,16 +70,24 @@ export async function tradingAccountReport(session: DatabaseSession): Promise<vo
   // ── Offre Back to Funded ──
   const backToFunded = await btfQ.getBackToFundedByAccount(conn, account.trading_account_uuid);
   if (backToFunded) {
-    const profitSplitOption = options.find(
-      (o) => o.name === "90/10 Split" || o.name === "100/0 Split"
+    // Same inheritance rule as the watcher and order services: profit split
+    // always, Extended Drawdown only while it still applied (no payout yet).
+    const inheritedOptions = options.filter(
+      (o) =>
+        o.name === "90/10 Split" ||
+        o.name === "100/0 Split" ||
+        (extendedDrawdownPoints([o]) > 0 && account.drawdown_reset_at == null)
+    );
+    const inheritedMajoration = inheritedOptions.reduce(
+      (sum, o) => sum + Number(o.majoration_percent), 0
     );
     ui.sectionHeader("Offre Back to Funded");
     renderKeyValue({
       "Offer UUID": backToFunded.offer_uuid,
       "Statut": backToFunded.status,
       "Prix challenge de base (catalogue)": formatCurrency(backToFunded.base_challenge_price, backToFunded.currency),
-      "Majoration option": profitSplitOption
-        ? `${formatPercent(profitSplitOption.majoration_percent)} (${profitSplitOption.name})`
+      "Majoration heritee": inheritedOptions.length > 0
+        ? `${formatPercent(inheritedMajoration)} (${inheritedOptions.map((o) => o.name).join(" + ")})`
         : "Aucune",
       "Montant": formatCurrency(backToFunded.amount, backToFunded.currency),
       "Creee le": formatDate(backToFunded.created_at),
