@@ -31,7 +31,10 @@ export async function settlePayout(
   const tunnel = await openManagerTunnel(config, env);
 
   try {
-    const response = await fetch(`http://127.0.0.1:${tunnel.localPort}/payout/settle`, {
+    // Moved server-side from /payout/settle to /internal/payout/settle so it is
+    // no longer routed by the manager's public ingress. Reached here via the
+    // port-forward tunnel, so the internal path works unchanged.
+    const response = await fetch(`http://127.0.0.1:${tunnel.localPort}/internal/payout/settle`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ tradingAccountUuid, payoutRequestUuid }),
