@@ -61,6 +61,9 @@ export async function createSession(
       database: envConfig.database,
       connectTimeout: 10000,
       ssl: { rejectUnauthorized: false },
+      // Dates are stored in UTC. Without this, mysql2 reads DATETIME columns in
+      // the process' local zone and every displayed date drifts by 1-2 hours.
+      timezone: "Z",
     });
 
     await connection.execute("SELECT 1");

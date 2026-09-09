@@ -114,6 +114,7 @@ async function main() {
         database: dbName,
         connectTimeout: 15000,
         ssl: caPath && existsSync(caPath) ? { ca: readFileSync(caPath, "utf-8") } : { rejectUnauthorized: false },
+        timezone: "Z", // dates are stored in UTC, do not shift them to the local zone
       });
       console.error(`[db-query] Connected. Executing query...`);
       const [rows] = await connection.execute(query);
@@ -177,6 +178,7 @@ async function main() {
       database: dbName,
       connectTimeout: 10000,
       ssl: { rejectUnauthorized: false },
+      timezone: "Z", // dates are stored in UTC, do not shift them to the local zone
     });
 
     console.error(`[db-query] Connected. Executing query...`);

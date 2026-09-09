@@ -12,8 +12,9 @@ import { searchTradingAccountPrompt } from "../utils/prompts.js";
 import { renderKeyValue, renderTable } from "../utils/table.js";
 import {
   formatDate, formatPhase, formatPercent, formatSuccess,
-  formatServer, formatCurrency, formatDuration, formatChallengeName,
+  formatServer, formatCurrency, formatDuration, formatChallengeName, formatSqlDateTime,
 } from "../utils/format.js";
+import { computeDailyDrawdownVerdict, describeDailyDrawdownVerdict } from "../utils/daily-drawdown.js";
 import { interactiveChat, WGF_SYSTEM_PROMPT } from "../ai.js";
 
 export async function deactivationAnalysis(
@@ -59,7 +60,7 @@ export async function deactivationAnalysis(
   // Deactivation day history
   let deactivationDayHistory: Awaited<ReturnType<typeof tradeHistoryQ.getTradeHistoryForDate>> = [];
   if (account.latest_update) {
-    const deactivationDate = formatDate(account.latest_update).slice(0, 10);
+    const deactivationDate = formatSqlDateTime(account.latest_update).slice(0, 10);
     deactivationDayHistory = await tradeHistoryQ.getTradeHistoryForDate(
       conn, account.trading_account_uuid, deactivationDate
     );
@@ -207,6 +208,19 @@ export async function deactivationAnalysis(
         String(h.number_of_trade_closed),
       ])
     );
+  }
+
+  // Daily drawdown verdict, replayed from the day entries so the support does
+  // not have to spot the first entry of the UTC day and subtract by hand.
+  const dailyVerdict = computeDailyDrawdownVerdict(
+    challenge, rules, account, options, deactivationDayHistory
+  );
+  if (dailyVerdict) {
+    ui.sectionHeader("Verdict drawdown journalier (journee UTC)");
+    const lines = describeDailyDrawdownVerdict(dailyVerdict);
+    ui.info(lines.computation);
+    if (dailyVerdict.breached) ui.success(lines.verdict);
+    else ui.warn(lines.verdict);
   }
 
   // Positions summary
@@ -375,6 +389,16 @@ ${tradeHistory.map((h) =>
 ${deactivationDayHistory.map((h) =>
       `${formatDate(h.pull_date)} | balance=${h.balance} | equity=${h.equity} | pnl=${h.pnl} | volume=${h.volume} | open=${h.number_of_trade_open} | closed=${h.number_of_trade_closed}`
     ).join("\n")}`);
+  }
+
+  const dailyVerdict = computeDailyDrawdownVerdict(
+    challenge, rules, account, options, deactivationDayHistory
+  );
+  if (dailyVerdict) {
+    const lines = describeDailyDrawdownVerdict(dailyVerdict);
+    sections.push(`=== VERDICT DRAWDOWN JOURNALIER (journee UTC) ===
+${lines.computation}
+${lines.verdict}`);
   }
 
   sections.push(`=== RESUME POSITIONS ===

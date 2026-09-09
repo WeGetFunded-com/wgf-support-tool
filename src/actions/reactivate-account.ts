@@ -8,7 +8,7 @@ import { REASONS } from "../types.js";
 import * as ui from "../ui.js";
 import { searchTradingAccountPrompt, confirmProductionAction } from "../utils/prompts.js";
 import { renderKeyValue } from "../utils/table.js";
-import { formatPhase, formatPercent, formatSuccess, formatServer, formatDate } from "../utils/format.js";
+import { formatPhase, formatPercent, formatSuccess, formatServer, formatDate, formatSqlDateTime } from "../utils/format.js";
 
 export async function reactivateAccount(session: DatabaseSession): Promise<void> {
   const { connection: conn, env, operator } = session;
@@ -39,7 +39,7 @@ export async function reactivateAccount(session: DatabaseSession): Promise<void>
   if (phaseEndExpired) {
     const extended = new Date();
     extended.setFullYear(extended.getFullYear() + 1);
-    newPhaseEnd = formatDate(extended);
+    newPhaseEnd = formatSqlDateTime(extended);
   }
 
   ui.sectionHeader("Compte a reactiver");

@@ -150,6 +150,10 @@ Tu as acces a des donnees brutes d'un compte de trading desactive.
 === RAISONS DE DESACTIVATION ===
 - MAX_DAILY_DRAW_DOWN : Le drawdown journalier a depasse le seuil (DDJ)
   Formule : firstEquityOfDay - currentEquity >= initialDeposit × maxDailyDrawdownPercent
+  La journee est la journee UTC (debut a minuit UTC = 02:00 Paris en ete, 01:00 en hiver).
+  firstEquityOfDay = la toute premiere entree de trade_history apres minuit UTC, rien d'autre.
+  Toutes les dates fournies ci-dessous sont en UTC. Une reactivation le meme jour ne
+  recalcule pas le plancher : si l'equity est encore sous le plancher, le compte retombe.
 - MAX_DRAW_DOWN : Le drawdown total a depasse le seuil (DDMax)
   Formule : currentEquity < initialDeposit × (1 - maxTotalDrawdownPercent)
 - CHALLENGE_EXPIRED : Le challenge a depasse sa date de fin

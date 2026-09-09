@@ -26,11 +26,21 @@ export function formatOptionAmount(
   return formatPercent(majorationPercent);
 }
 
-export function formatDate(date: Date | string | null | undefined): string {
+// formatSqlDateTime renders a date as "YYYY-MM-DD HH:MM:SS" in UTC, the exact
+// form stored in the database. Use it for SQL values and date slicing.
+export function formatSqlDateTime(date: Date | string | null | undefined): string {
   if (!date) return "N/A";
   const d = date instanceof Date ? date : new Date(date);
   if (isNaN(d.getTime())) return "N/A";
   return d.toISOString().replace("T", " ").slice(0, 19);
+}
+
+// formatDate is the display form: same as formatSqlDateTime with an explicit
+// UTC suffix, because the drawdown day starts at midnight UTC (02:00 Paris in
+// summer), which is easy to misread as local time.
+export function formatDate(date: Date | string | null | undefined): string {
+  const s = formatSqlDateTime(date);
+  return s === "N/A" ? s : `${s} UTC`;
 }
 
 export function formatPhase(phase: number, challengeType?: ChallengeType | string): string {
