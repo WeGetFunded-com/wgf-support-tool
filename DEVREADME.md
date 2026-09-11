@@ -38,7 +38,10 @@ src/
 │   ├── uuid.ts               # generateUuid, isValidUuid, formatUuid
 │   ├── format.ts             # Formateurs (%, devise, date, phase, success...)
 │   ├── table.ts              # renderKeyValue + renderTable (ASCII tables)
-│   └── prompts.ts            # Prompts reutilisables (searchUser, searchTA, confirm)
+│   ├── prompts.ts            # Prompts reutilisables (searchUser, searchTA, confirm)
+│   ├── extended-drawdown.ts  # Points de l'option Extended Drawdown (1 a 3)
+│   ├── daily-drawdown.ts     # Rejeu du plancher DDJ fixe (1re equity du jour UTC)
+│   └── trailing-drawdown.ts  # Rejeu du plancher trailing (HWM sur clotures)
 │
 ├── queries/                  # Couche SQL pure — 1 fichier par entite
 │   ├── user.queries.ts
@@ -261,7 +264,7 @@ Definies dans `PHASE_TRANSITIONS` (`types.ts`).
 
 | Reason | Utilisation |
 |--------|------------|
-| `MAX_DAILY_DRAW_DOWN` | Drawdown journalier depasse |
+| `MAX_DAILY_DRAW_DOWN` | Drawdown journalier depasse — **ou** plancher trailing franchi : le watcher enregistre la meme reason dans les deux cas, elle ne dit donc pas quelle regle s'appliquait |
 | `MAX_DRAW_DOWN` | Drawdown total depasse |
 | `NEWS_VIOLATION` | Violation regle news trading |
 | `CHALLENGE_EXPIRED` | Challenge expire |

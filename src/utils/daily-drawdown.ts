@@ -1,11 +1,7 @@
 import type { DbChallenge, DbChallengeRule, DbTradeHistory, DbTradingAccount, DbOption } from "../types.js";
 import { formatCurrency, formatDate } from "./format.js";
 import { extendedDrawdownPoints, isExtendedDrawdownActive } from "./extended-drawdown.js";
-
-// Challenge types on which the watcher applies a trailing floor instead of the
-// fixed daily one (accounts started after the trailing cutoff). For those the
-// daily verdict below does not apply.
-const TRAILING_TYPES: ReadonlySet<string> = new Set(["unlimited", "funded_unlimited"]);
+import { isTrailingDrawdownAccount } from "./trailing-drawdown.js";
 
 export interface DailyDrawdownVerdict {
   firstEquity: number;
@@ -32,12 +28,14 @@ export interface DailyDrawdownVerdict {
 export function computeDailyDrawdownVerdict(
   challenge: Pick<DbChallenge, "type" | "initial_coins_amount"> | null,
   rules: Pick<DbChallengeRule, "max_daily_drawdown_percent"> | null,
-  account: Pick<DbTradingAccount, "drawdown_reset_at">,
+  account: Pick<DbTradingAccount, "challenge_phase_begin" | "drawdown_reset_at">,
   options: Pick<DbOption, "name">[],
   dayHistory: Pick<DbTradeHistory, "pull_date" | "equity">[]
 ): DailyDrawdownVerdict | null {
   if (!challenge || !rules || rules.max_daily_drawdown_percent == null) return null;
-  if (TRAILING_TYPES.has(challenge.type)) return null;
+  // Only the accounts actually on the trailing rule are excluded: an unlimited
+  // opened before the cutoff still runs on the fixed daily drawdown.
+  if (isTrailingDrawdownAccount(challenge, account)) return null;
   if (dayHistory.length === 0) return null;
 
   const sorted = [...dayHistory].sort(

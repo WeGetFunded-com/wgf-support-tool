@@ -64,7 +64,7 @@ La connexion a la **production** demande une confirmation supplementaire (tapez 
 | **Comptes actifs d'un utilisateur** | Liste rapide de tous les comptes actifs d'un utilisateur avec phase, serveur, profit target et dates. |
 | **Rechercher des utilisateurs** | Recherche par email, nom ou CTID. Affiche un tableau avec les resultats trouves. |
 | **Rapport des payouts** | Liste toutes les demandes de payout avec filtre par statut (pending, approved, paid, rejected). Permet de voir le detail d'une demande (IBAN, wallet, montant, profit split). |
-| **Analyse de desactivation** | Rapport complet d'un compte desactive : toutes les donnees du compte, regles, historique de trading, positions, logs d'audit. Lance ensuite un **chat AI** qui analyse la desactivation et donne un diagnostic. |
+| **Analyse de desactivation** | Rapport complet d'un compte desactive : toutes les donnees du compte, regles, historique de trading, positions, logs d'audit. Affiche le **verdict drawdown** (plancher recalcule et franchissement) selon la regle du compte : journaliere fixe, ou trailing sur clotures pour les unlimited/funded_unlimited recents. Lance ensuite un **chat AI** qui analyse la desactivation et donne un diagnostic. |
 
 ---
 

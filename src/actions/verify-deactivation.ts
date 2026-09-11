@@ -16,6 +16,9 @@ import {
   formatServer, formatCurrency, formatDuration, formatChallengeName, formatSqlDateTime,
 } from "../utils/format.js";
 import { computeDailyDrawdownVerdict, describeDailyDrawdownVerdict } from "../utils/daily-drawdown.js";
+import {
+  computeTrailingDrawdownVerdict, describeTrailingDrawdownVerdict, isTrailingDrawdownAccount,
+} from "../utils/trailing-drawdown.js";
 import { interactiveChat, WGF_SYSTEM_PROMPT } from "../ai.js";
 
 export async function verifyDeactivation(
@@ -52,6 +55,7 @@ export async function verifyDeactivation(
   const options = await taQ.getTradingAccountOptions(conn, account.trading_account_uuid);
   const tradeHistory = await tradeHistoryQ.getTradeHistory(conn, account.trading_account_uuid, 30);
   const firstHistory = await tradeHistoryQ.getFirstTradeHistory(conn, account.trading_account_uuid);
+  const eodHistory = await tradeHistoryQ.getEodTradeHistory(conn, account.trading_account_uuid);
   const positions = await tradeHistoryQ.getPositions(conn, account.trading_account_uuid, 20);
   const positionsSummary = await tradeHistoryQ.getPositionsSummary(conn, account.trading_account_uuid);
   const phaseHistory = await taQ.getAllTradingAccountsByOrder(conn, account.order_uuid);
@@ -195,9 +199,17 @@ export async function verifyDeactivation(
     );
   }
 
-  // Deactivation day entries
+  // Deactivation day entries. On a trailing account the floor does not derive
+  // from these rows at all, so the header says it: reading the first equity of
+  // the day and subtracting the drawdown there gives a threshold the watcher
+  // never used.
+  const isTrailing = isTrailingDrawdownAccount(challenge, account);
   if (deactivationDayHistory.length > 0) {
-    ui.sectionHeader("Entrees du jour de desactivation");
+    ui.sectionHeader(
+      isTrailing
+        ? "Entrees du jour de desactivation (informatif — compte en trailing, le seuil ne depend pas de ces valeurs)"
+        : "Entrees du jour de desactivation"
+    );
     renderTable(
       ["Date", "Balance", "Equity", "PNL", "Volume", "Open", "Closed"],
       deactivationDayHistory.map((h) => [
@@ -222,6 +234,21 @@ export async function verifyDeactivation(
     const lines = describeDailyDrawdownVerdict(dailyVerdict);
     ui.info(lines.computation);
     if (dailyVerdict.breached) ui.success(lines.verdict);
+    else ui.warn(lines.verdict);
+  }
+
+  // Trailing drawdown verdict, replayed from the EOD history. Without it the
+  // support is left with the day entries only and computes the fixed daily
+  // threshold by hand — which does not apply to these accounts.
+  const trailingVerdict = computeTrailingDrawdownVerdict(
+    challenge, rules, account, options, eodHistory, deactivationDayHistory
+  );
+  if (trailingVerdict) {
+    ui.sectionHeader("Verdict trailing drawdown (HWM sur clotures)");
+    const lines = describeTrailingDrawdownVerdict(trailingVerdict);
+    ui.info(lines.hwmLine);
+    ui.info(lines.computation);
+    if (trailingVerdict.breached) ui.success(lines.verdict);
     else ui.warn(lines.verdict);
   }
 
@@ -270,7 +297,7 @@ export async function verifyDeactivation(
   if (config.openRouterApiKey) {
     const rawData = buildRawDataString(
       account, accountDisplay, challenge, rules, balance, firstHistory, options,
-      tradeHistory, deactivationDayHistory, positions, positionsSummary,
+      tradeHistory, deactivationDayHistory, eodHistory, positions, positionsSummary,
       phaseHistory, phaseDisplayMap, user, auditLogs
     );
 
@@ -345,6 +372,7 @@ function buildRawDataString(
   options: any[],
   tradeHistory: any[],
   deactivationDayHistory: any[],
+  eodHistory: any[],
   positions: any[],
   positionsSummary: any,
   phaseHistory: any[],
@@ -444,6 +472,21 @@ ${deactivationDayHistory.map((h) =>
   if (dailyVerdict) {
     const lines = describeDailyDrawdownVerdict(dailyVerdict);
     sections.push(`=== VERDICT DRAWDOWN JOURNALIER (journee UTC) ===
+${lines.computation}
+${lines.verdict}`);
+  }
+
+  const trailingVerdict = computeTrailingDrawdownVerdict(
+    challenge, rules, account, options, eodHistory, deactivationDayHistory
+  );
+  if (trailingVerdict && eodHistory.length > 0) {
+    sections.push(`=== CLOTURES QUOTIDIENNES (base du HWM trailing) ===
+${eodHistory.map((h) => `${formatDate(h.pull_date)} | balance=${h.balance} | equity=${h.equity}`).join("\n")}`);
+  }
+  if (trailingVerdict) {
+    const lines = describeTrailingDrawdownVerdict(trailingVerdict);
+    sections.push(`=== VERDICT TRAILING DRAWDOWN (HWM sur clotures) ===
+${lines.hwmLine}
 ${lines.computation}
 ${lines.verdict}`);
   }

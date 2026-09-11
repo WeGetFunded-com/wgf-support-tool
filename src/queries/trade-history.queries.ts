@@ -147,3 +147,31 @@ export async function createInitialTradeHistory(
     [tradeHistoryUuid, taUuid, initialBalance, initialBalance]
   );
 }
+
+// getEodTradeHistory returns the last record of every day, i.e. the exact rows
+// the watcher feeds to calculateTrailingFloor. Mirrors model-query's
+// ReadLastValueOfDaysByTradingAccountUUID so the replayed floor matches the
+// one the watcher actually enforced.
+export async function getEodTradeHistory(
+  conn: Conn,
+  taUuid: string
+): Promise<DbTradeHistory[]> {
+  const [rows] = await conn.execute(
+    `SELECT BIN_TO_UUID(t1.trade_history_uuid) as trade_history_uuid,
+            BIN_TO_UUID(t1.trading_account_uuid) as trading_account_uuid,
+            t1.pull_date, t1.balance, t1.equity,
+            t1.number_of_trade_open, t1.number_of_trade_closed,
+            t1.pnl, t1.volume
+     FROM trade_history AS t1
+     INNER JOIN (
+       SELECT MAX(pull_date) as max_pull_date
+       FROM trade_history
+       WHERE trading_account_uuid = UUID_TO_BIN(?)
+       GROUP BY DATE(pull_date)
+     ) t2 ON t1.pull_date = t2.max_pull_date
+     WHERE t1.trading_account_uuid = UUID_TO_BIN(?)
+     ORDER BY t1.pull_date ASC`,
+    [taUuid, taUuid]
+  );
+  return rows as DbTradeHistory[];
+}

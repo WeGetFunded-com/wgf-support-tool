@@ -174,11 +174,16 @@ Tu as acces a des donnees brutes d'un compte de trading desactive.
 Verifie : DDJ, DDMax, expiration challenge, trader existe sur cTrader
 Si violation → ferme positions, passe en NO_TRADING, desactive (success=0), envoie email
 
-=== TRAILING DRAWDOWN EOD (post 15 mars 2026) ===
-Pour unlimited/funded_unlimited crees apres le 15 mars 2026 :
+=== TRAILING DRAWDOWN EOD (post 18 fevrier 2026) ===
+Pour unlimited/funded_unlimited dont la phase a debute apres le 18 fevrier 2026
+(TRAILING_DRAWDOWN_CUTOFF cote watcher) :
 - Remplace le DDJ fixe par un High Water Mark (HWM) dynamique
 - Floor = min(HWM - 4%, deposit), monotone croissant, plafonne au deposit
-- Calcule sur les records EOD, pas en temps reel
+- Calcule sur les records EOD des journees terminees : la 1ere equity du jour
+  de desactivation n'entre PAS dans le seuil. Ne jamais conclure a partir de
+  "1ere equity du jour - drawdown" sur ces comptes.
+- Un breach trailing est enregistre avec reason=MAX_DAILY_DRAW_DOWN : la raison
+  affichee ne signifie donc pas que la regle journaliere fixe s'appliquait.
 
 === OPTIONS ===
 - No Consistency : bypass le recalcul du profit target (standard/unlimited)
