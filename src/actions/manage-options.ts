@@ -20,7 +20,7 @@ export async function manageOptions(session: DatabaseSession): Promise<void> {
 
   // Get current options on the account
   const currentOptions = await taQ.getTradingAccountOptions(conn, account.trading_account_uuid);
-  const allOptions = await optionsQ.getAllOptions(conn);
+  const allOptions = await optionsQ.getActiveOptions(conn);
 
   ui.sectionHeader(`Options du compte ${accountDisplay.label}`);
 

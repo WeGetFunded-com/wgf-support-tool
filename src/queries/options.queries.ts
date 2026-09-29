@@ -3,10 +3,12 @@ import type { DbOption } from "../types.js";
 
 type Conn = mysql.Connection;
 
-export async function getAllOptions(conn: Conn): Promise<DbOption[]> {
+// Expired options are hidden so they can no longer be attached to an account.
+export async function getActiveOptions(conn: Conn): Promise<DbOption[]> {
   const [rows] = await conn.execute(
     `SELECT BIN_TO_UUID(option_uuid) as option_uuid, name, majoration_percent, flat_price
      FROM options
+     WHERE expiration_date IS NULL OR expiration_date > NOW()
      ORDER BY name`
   );
   return rows as DbOption[];

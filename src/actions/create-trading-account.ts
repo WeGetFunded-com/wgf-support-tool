@@ -65,7 +65,7 @@ export async function createTradingAccount(
   const challenge = challenges[challengeIdx];
 
   // 5. Select options
-  const allOptions = await optionsQ.getAllOptions(conn);
+  const allOptions = await optionsQ.getActiveOptions(conn);
   let selectedOptions: string[] = [];
 
   if (allOptions.length > 0) {
