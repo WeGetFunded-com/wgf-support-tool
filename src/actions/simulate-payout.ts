@@ -195,11 +195,20 @@ export async function simulatePayout(
   });
   const payoutAmount = parseFloat(amountStr);
 
+  const payoutMethod = await select<"rise" | "wegetcoin">({
+    message: "Methode de versement :",
+    choices: [
+      { name: "Rise (cash)", value: "rise" },
+      { name: "WeGetCoins (converti a l'approbation, +10 %)", value: "wegetcoin" },
+    ],
+  });
+  const isWeGetCoin = payoutMethod === "wegetcoin";
+
   const postalAddress = [user.address, [user.postal_code, user.city].filter(Boolean).join(" ")]
     .filter((part) => part && String(part).trim())
     .join(", ");
 
-  if (!postalAddress) {
+  if (!postalAddress && !isWeGetCoin) {
     ui.error("Cet utilisateur n'a pas d'adresse postale : le manager refusera la demande.");
     return;
   }
@@ -209,8 +218,11 @@ export async function simulatePayout(
     "Compte": display.label,
     "Trader": `${user.firstname} ${user.lastname} <${user.email}>`,
     "Montant": formatCurrency(payoutAmount),
-    "Profit split": profitSplit + (options.length > 0 ? "" : "   (aucune option sur le compte)"),
-    "Adresse": postalAddress,
+    "Methode": isWeGetCoin ? "WeGetCoins" : "Rise",
+    "Profit split": isWeGetCoin
+      ? "calcule par le manager depuis les options de la commande"
+      : profitSplit + (options.length > 0 ? "" : "   (aucune option sur le compte)"),
+    "Adresse": isWeGetCoin ? "non requise" : postalAddress,
     "Regles": force ? "FORCEES (compte non eligible)" : "respectees",
     "Emails": "aucun (le trader ne sera pas notifie)",
     "Tracking": "payout_requested emis avec le vrai user_uuid",
@@ -223,13 +235,13 @@ export async function simulatePayout(
   // onto a staging account to reproduce a bug.
   if (display.brokerName === "mt5") {
     ui.warn(
-      `Un passage ulterieur a "paye" debitera le compte MT5 ${display.login} ` +
+      `${isWeGetCoin ? "L'approbation" : 'Un passage ulterieur a "paye"'} debitera le compte MT5 ${display.login} ` +
         `sur mt5.wegetfunded.com (serveur partage staging/production).`
     );
   }
 
   const description =
-    `Creer une demande de payout de ${formatCurrency(payoutAmount)} sur ${display.label} ` +
+    `Creer une demande de payout ${isWeGetCoin ? "en WeGetCoins " : ""}de ${formatCurrency(payoutAmount)} sur ${display.label} ` +
     `(${user.email})${force ? " en FORCANT les regles d'eligibilite" : ""}`;
 
   const confirmed = await confirmProductionAction(env, description);
@@ -249,6 +261,7 @@ export async function simulatePayout(
       postalAddress,
       payoutAmount,
       profitSplit,
+      payoutMethod,
       force,
     });
   } catch (err) {
@@ -269,6 +282,7 @@ export async function simulatePayout(
       account: display.label,
       trading_account_uuid: account.trading_account_uuid,
       amount: payoutAmount,
+      payout_method: payoutMethod,
       profit_split: created.profit_split,
       forced: force,
       eligible_at_creation: eligibility.eligible,
@@ -287,7 +301,11 @@ export async function simulatePayout(
   });
 
   console.log("");
-  ui.info('Suite du flux via "Gerer une demande de payout" : approuver, puis marquer comme paye.');
+  ui.info(
+    isWeGetCoin
+      ? 'Suite du flux via "Gerer une demande de payout" : approuver debite MT5 et credite les WeGetCoins.'
+      : 'Suite du flux via "Gerer une demande de payout" : approuver, puis marquer comme paye.'
+  );
   ui.warn("Tant qu'elle est en attente, cette demande empeche le trader d'en faire une vraie.");
   ui.info('Pour nettoyer : "Supprimer une demande de payout simulee".');
 }

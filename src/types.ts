@@ -167,7 +167,7 @@ export interface DbPayoutRequest {
   payout_request_uuid: string;
   user_uuid: string;
   trading_account_uuid: string;
-  payout_method: "iban" | "crypto";
+  payout_method: "iban" | "crypto" | "rise" | "wegetcoin";
   iban: string | null;
   wallet_address: string | null;
   wallet_protocol: "ERC20" | "TRC20" | null;

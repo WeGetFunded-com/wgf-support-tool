@@ -1,6 +1,19 @@
 import type { Config, Environment } from "./config.js";
 import { openManagerTunnel } from "./tunnel.js";
 
+/** What a payout paid in WeGetCoins converts into, at the rate frozen on the wallet lines. */
+export interface WeGetCoinPayoutCredit {
+  fxRateUsdEur: number;
+  rateDate: string;
+  rateSource: string;
+  rateFallback: boolean;
+  profitSplit: string;
+  usdAfterSplit: number;
+  conversionCoins: number;
+  bonusCoins: number;
+  totalCoins: number;
+}
+
 export interface SettlePayoutResult {
   payoutRequestUuid: string;
   status: string;
@@ -9,6 +22,7 @@ export interface SettlePayoutResult {
   debitedAmount?: number;
   validatedAt?: string;
   alreadySettled?: boolean;
+  weGetCoins?: WeGetCoinPayoutCredit;
 }
 
 /**
@@ -26,7 +40,8 @@ export async function settlePayout(
   config: Config,
   env: Environment,
   tradingAccountUuid: string,
-  payoutRequestUuid: string
+  payoutRequestUuid: string,
+  operator: string
 ): Promise<SettlePayoutResult> {
   const tunnel = await openManagerTunnel(config, env);
 
@@ -37,7 +52,7 @@ export async function settlePayout(
     const response = await fetch(`http://127.0.0.1:${tunnel.localPort}/internal/payout/settle`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ tradingAccountUuid, payoutRequestUuid }),
+      body: JSON.stringify({ tradingAccountUuid, payoutRequestUuid, operator }),
       signal: AbortSignal.timeout(60_000),
     });
 
@@ -48,6 +63,36 @@ export async function settlePayout(
     }
 
     return payload as SettlePayoutResult;
+  } finally {
+    tunnel.close();
+  }
+}
+
+/**
+ * The WeGetCoins a payout paid in WeGetCoins would credit if settled now, at
+ * today's rate. Nothing moves: shown to the operator before approving.
+ */
+export async function previewWeGetCoinPayout(
+  config: Config,
+  env: Environment,
+  tradingAccountUuid: string,
+  payoutRequestUuid: string
+): Promise<WeGetCoinPayoutCredit> {
+  const tunnel = await openManagerTunnel(config, env);
+
+  try {
+    const response = await fetch(
+      `http://127.0.0.1:${tunnel.localPort}/internal/payout/wegetcoin/${tradingAccountUuid}/${payoutRequestUuid}`,
+      { signal: AbortSignal.timeout(30_000) }
+    );
+
+    const payload: unknown = await response.json().catch(() => null);
+
+    if (!response.ok) {
+      throw new Error(readError(payload) ?? `le manager a repondu ${response.status}`);
+    }
+
+    return payload as WeGetCoinPayoutCredit;
   } finally {
     tunnel.close();
   }

@@ -56,6 +56,8 @@ export interface SimulatePayoutInput {
   postalAddress: string;
   payoutAmount: number;
   profitSplit?: string;
+  /** "wegetcoin" converts the payout at approval; the manager then derives the split from the order. */
+  payoutMethod?: "rise" | "wegetcoin";
   force: boolean;
 }
 
