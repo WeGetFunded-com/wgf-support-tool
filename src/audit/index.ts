@@ -9,6 +9,7 @@ import { payoutReport } from "./payout-report.js";
 import { deactivationAnalysis } from "./deactivation-analysis.js";
 import { promoUsageAnalysis } from "./promo-usage-analysis.js";
 import { affiliationReport } from "./affiliation-report.js";
+import { weGetCoinReport } from "./wegetcoin-report.js";
 import * as ui from "../ui.js";
 
 type AuditChoice =
@@ -20,6 +21,7 @@ type AuditChoice =
   | "deactivation_analysis"
   | "promo_usage"
   | "affiliation_report"
+  | "wegetcoin_report"
   | "back";
 
 export async function auditMenu(session: DatabaseSession, config: Config): Promise<void> {
@@ -38,6 +40,7 @@ export async function auditMenu(session: DatabaseSession, config: Config): Promi
         { name: "Verification de la desactivation d'un compte", value: "deactivation_analysis" },
         { name: "Analyse de l'utilisation d'un code promo", value: "promo_usage" },
         { name: "Analyse de l'affiliation", value: "affiliation_report" },
+        { name: "WeGetCoins d'un utilisateur (solde et historique)", value: "wegetcoin_report" },
         { name: "Retour", value: "back" },
       ],
     });
@@ -69,6 +72,9 @@ export async function auditMenu(session: DatabaseSession, config: Config): Promi
           break;
         case "affiliation_report":
           await affiliationReport(session);
+          break;
+        case "wegetcoin_report":
+          await weGetCoinReport(session);
           break;
       }
     } catch (err: unknown) {

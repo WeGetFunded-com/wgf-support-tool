@@ -15,6 +15,7 @@ import type { PromoSummary } from "../queries/promo.queries.js";
 import type { AccountDisplayInfo } from "../queries/broker-account.queries.js";
 import * as ui from "../ui.js";
 import { searchUserPrompt } from "../utils/prompts.js";
+import { renderWeGetCoins } from "../utils/wegetcoin.js";
 import { renderKeyValue, renderTable } from "../utils/table.js";
 import {
   formatDate, formatPhase, formatPercent, formatSuccess,
@@ -205,6 +206,8 @@ export async function userReport(session: DatabaseSession, config: Config): Prom
       ])
     );
   }
+
+  await renderWeGetCoins(conn, user, 5);
 
   // ── Analyse AI optionnelle ──
   if (!config.openRouterApiKey) {

@@ -18,6 +18,7 @@ import { verifyDeactivation } from "./verify-deactivation.js";
 import { forcePhaseTransition } from "./force-phase-transition.js";
 import { resetAffiliationBalance } from "./reset-affiliation-balance.js";
 import { gdprErase } from "./gdpr-erase.js";
+import { weGetCoinManage } from "./wegetcoin-manage.js";
 import * as ui from "../ui.js";
 
 type ActionChoice =
@@ -38,6 +39,7 @@ type ActionChoice =
   | "verify_deactivation"
   | "reset_affiliation_balance"
   | "gdpr_erase"
+  | "wegetcoin_manage"
   | "back";
 
 export async function actionsMenu(session: DatabaseSession, config: Config): Promise<void> {
@@ -64,6 +66,7 @@ export async function actionsMenu(session: DatabaseSession, config: Config): Pro
         { name: "Mettre a jour l'identifiant broker (cTrader/MT5)", value: "update_ctrader_id" },
         { name: "Verification de la desactivation d'un compte", value: "verify_deactivation" },
         { name: "Remettre a 0 le solde d'affiliation d'un affilie", value: "reset_affiliation_balance" },
+        { name: "WeGetCoins d'un utilisateur (crediter, debiter)", value: "wegetcoin_manage" },
         { name: "Suppression totale RGPD (droit a l'effacement)", value: "gdpr_erase" },
         { name: "Retour", value: "back" },
       ],
@@ -120,6 +123,9 @@ export async function actionsMenu(session: DatabaseSession, config: Config): Pro
           break;
         case "reset_affiliation_balance":
           await resetAffiliationBalance(session);
+          break;
+        case "wegetcoin_manage":
+          await weGetCoinManage(session, config);
           break;
         case "gdpr_erase":
           await gdprErase(session);
