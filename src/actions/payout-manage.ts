@@ -88,17 +88,29 @@ async function handlePayoutSelection(
 
   const isWeGetCoin = payout.payout_method === "wegetcoin";
 
+  // Same choices as the dashboard: a paid or rejected payout takes no further decision.
+  const choices: { name: string; value: string }[] = [];
+  if (payout.status === "pending") {
+    choices.push({
+      name: isWeGetCoin ? "Approuver (debit MT5 + credit WeGetCoins + paye)" : "Approuver",
+      value: "approved",
+    });
+    choices.push({ name: "Rejeter", value: "rejected" });
+    // A WeGetCoin payout is paid by its approval.
+    if (!isWeGetCoin) choices.push({ name: "Marquer comme paye", value: "paid" });
+  } else if (payout.status === "approved") {
+    choices.push({ name: "Marquer comme paye", value: "paid" });
+    choices.push({ name: "Rejeter", value: "rejected" });
+  }
+
+  if (choices.length === 0) {
+    ui.info(`Aucune action possible sur un payout "${payout.status}".`);
+    return;
+  }
+
   const action = await select({
     message: "Action :",
-    choices: [
-      {
-        name: isWeGetCoin ? "Approuver (debit MT5 + credit WeGetCoins + paye)" : "Approuver",
-        value: "approved",
-      },
-      { name: "Rejeter", value: "rejected" },
-      { name: "Marquer comme paye", value: "paid" },
-      { name: "Annuler", value: "cancel" },
-    ],
+    choices: [...choices, { name: "Annuler", value: "cancel" }],
   });
 
   if (action === "cancel") return;
