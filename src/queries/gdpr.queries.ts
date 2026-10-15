@@ -74,6 +74,19 @@ async function count(conn: Conn, sql: string, params: unknown[]): Promise<number
 
 const placeholders = (list: string[]) => list.map(() => "UUID_TO_BIN(?)").join(",");
 
+// Une archive se rattache au client par son email ou par un de ses comptes de trading.
+const archiveWhere = (scope: GdprScope) =>
+  scope.tradingAccountUuids.length === 0
+    ? "email = ?"
+    : `(email = ? OR trading_account_uuid IN (${placeholders(scope.tradingAccountUuids)}))`;
+const archiveParams = (scope: GdprScope) => [scope.email, ...scope.tradingAccountUuids];
+
+// Tables filles sans user_uuid : rattachees via leur parent (un seul parametre, le user_uuid).
+const ORDER_OF_USER = "order_uuid IN (SELECT order_uuid FROM orders WHERE user_uuid = UUID_TO_BIN(?))";
+const PROMO_OF_USER = "promo_uuid IN (SELECT promo_uuid FROM promo WHERE user_uuid = UUID_TO_BIN(?))";
+const PAYMENT_ATTEMPT_OF_USER =
+  "merchant_reference_id IN (SELECT merchant_reference_id FROM payment_session WHERE user_uuid = UUID_TO_BIN(?))";
+
 export async function detectHolds(
   conn: Conn,
   scope: GdprScope,
@@ -152,12 +165,22 @@ export async function inventory(
   c["payout_request"] = await count(conn, `SELECT COUNT(*) as n FROM payout_request WHERE user_uuid = UUID_TO_BIN(?)`, u);
   c["funded_activation"] = await count(conn, `SELECT COUNT(*) as n FROM funded_activation WHERE user_uuid = UUID_TO_BIN(?)`, u);
   c["affiliation_code"] = await count(conn, `SELECT COUNT(*) as n FROM affiliation_code WHERE owner_uuid = UUID_TO_BIN(?)`, u);
-  c["archive"] = await count(conn, `SELECT COUNT(*) as n FROM archive WHERE email = ?`, [scope.email]);
+  c["archive"] = await count(conn, `SELECT COUNT(*) as n FROM archive WHERE ${archiveWhere(scope)}`, archiveParams(scope));
 
   if (tables.has("contest_entry"))
     c["contest_entry"] = await count(conn, `SELECT COUNT(*) as n FROM contest_entry WHERE user_uuid = UUID_TO_BIN(?)`, u);
   if (tables.has("payment_session"))
     c["payment_session"] = await count(conn, `SELECT COUNT(*) as n FROM payment_session WHERE user_uuid = UUID_TO_BIN(?)`, u);
+  if (tables.has("payment_attempt"))
+    c["payment_attempt"] = await count(conn, `SELECT COUNT(*) as n FROM payment_attempt WHERE ${PAYMENT_ATTEMPT_OF_USER}`, u);
+  if (tables.has("back_to_funded"))
+    c["back_to_funded"] = await count(conn, `SELECT COUNT(*) as n FROM back_to_funded WHERE user_uuid = UUID_TO_BIN(?)`, u);
+  if (tables.has("promo_reward"))
+    c["promo_reward"] = await count(conn, `SELECT COUNT(*) as n FROM promo_reward WHERE ${PROMO_OF_USER}`, u);
+  if (tables.has("promo_scope"))
+    c["promo_scope"] = await count(conn, `SELECT COUNT(*) as n FROM promo_scope WHERE ${PROMO_OF_USER}`, u);
+  if (tables.has("order_options"))
+    c["order_options"] = await count(conn, `SELECT COUNT(*) as n FROM order_options WHERE ${ORDER_OF_USER}`, u);
   if (tables.has("broker_accounts"))
     c["broker_accounts"] = await count(conn, `SELECT COUNT(*) as n FROM broker_accounts WHERE user_id = UUID_TO_BIN(?)`, u);
   if (tables.has("affiliation_settlement"))
@@ -261,25 +284,41 @@ export async function erase(conn: Conn, scope: GdprScope, tables: Set<string>): 
     await run("contest_entry", `DELETE FROM contest_entry WHERE user_uuid = UUID_TO_BIN(?)`, [scope.userUuid]);
   if (tables.has("broker_accounts"))
     await run("broker_accounts", `DELETE FROM broker_accounts WHERE user_id = UUID_TO_BIN(?)`, [scope.userUuid]);
+  await run("archive", `DELETE FROM archive WHERE ${archiveWhere(scope)}`, archiveParams(scope));
+  await run("payout_request", `DELETE FROM payout_request WHERE user_uuid = UUID_TO_BIN(?)`, [scope.userUuid]);
 
   if (ta.length > 0) {
     await run("trading_account", `DELETE FROM trading_account WHERE trading_account_uuid IN (${placeholders(ta)})`, ta);
   }
 
   await run("funded_activation", `DELETE FROM funded_activation WHERE user_uuid = UUID_TO_BIN(?)`, [scope.userUuid]);
-  await run("payout_request", `DELETE FROM payout_request WHERE user_uuid = UUID_TO_BIN(?)`, [scope.userUuid]);
+  if (tables.has("order_options"))
+    await run("order_options", `DELETE FROM order_options WHERE ${ORDER_OF_USER}`, [scope.userUuid]);
   await run("orders", `DELETE FROM orders WHERE user_uuid = UUID_TO_BIN(?)`, [scope.userUuid]);
 
   if (scope.paymentUuids.length > 0) {
     await run("payment", `DELETE FROM payment WHERE payment_uuid IN (${placeholders(scope.paymentUuids)})`, scope.paymentUuids);
   }
+  if (tables.has("payment_attempt"))
+    await run("payment_attempt", `DELETE FROM payment_attempt WHERE ${PAYMENT_ATTEMPT_OF_USER}`, [scope.userUuid]);
   if (tables.has("payment_session"))
     await run("payment_session", `DELETE FROM payment_session WHERE user_uuid = UUID_TO_BIN(?)`, [scope.userUuid]);
 
   await run("used_promo", `DELETE FROM used_promo WHERE user_uuid = UUID_TO_BIN(?)`, [scope.userUuid]);
+  if (tables.has("promo_reward"))
+    await run("promo_reward", `DELETE FROM promo_reward WHERE ${PROMO_OF_USER}`, [scope.userUuid]);
+  if (tables.has("promo_scope"))
+    await run("promo_scope", `DELETE FROM promo_scope WHERE ${PROMO_OF_USER}`, [scope.userUuid]);
   await run("promo", `DELETE FROM promo WHERE user_uuid = UUID_TO_BIN(?)`, [scope.userUuid]);
-  await run("affiliation_code", `DELETE FROM affiliation_code WHERE owner_uuid = UUID_TO_BIN(?)`, [scope.userUuid]);
-  await run("archive", `DELETE FROM archive WHERE email = ?`, [scope.email]);
+  // Filleuls inscrits sans commande (sinon motif Affiliation) : on detache le code.
+  if (scope.affiliationCodeUuids.length > 0) {
+    const codes = scope.affiliationCodeUuids;
+    await run("registration (code parrain detache)", `UPDATE registration SET used_affiliation_code = NULL WHERE used_affiliation_code IN (${placeholders(codes)})`, codes);
+    await run("user (code parrain detache)", `UPDATE user SET used_affiliation_code = NULL WHERE used_affiliation_code IN (${placeholders(codes)})`, codes);
+  }
+  await run("affiliation_code",`DELETE FROM affiliation_code WHERE owner_uuid = UUID_TO_BIN(?)`, [scope.userUuid]);
+  if (tables.has("back_to_funded"))
+    await run("back_to_funded", `DELETE FROM back_to_funded WHERE user_uuid = UUID_TO_BIN(?)`, [scope.userUuid]);
   await run("tokens", `DELETE FROM tokens WHERE user_uuid = UUID_TO_BIN(?)`, [scope.userUuid]);
   await run("registration", `DELETE FROM registration WHERE email = ?`, [scope.email]);
   await run("user", `DELETE FROM user WHERE user_uuid = UUID_TO_BIN(?)`, [scope.userUuid]);
