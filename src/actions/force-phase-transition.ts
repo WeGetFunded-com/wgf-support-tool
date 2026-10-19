@@ -11,6 +11,7 @@ import * as baQ from "../queries/broker-account.queries.js";
 import * as ui from "../ui.js";
 import { searchTradingAccountPrompt, confirmProductionAction } from "../utils/prompts.js";
 import { renderKeyValue } from "../utils/table.js";
+import { awardForcedPhaseXp } from "../utils/phase-xp.js";
 import { formatPhase, formatChallengeName, formatSuccess } from "../utils/format.js";
 import { runJob, getKubeAccess, generateJobName } from "../kube/index.js";
 import type { KubeJobSpec } from "../kube/index.js";
@@ -142,12 +143,12 @@ export async function forcePhaseTransition(
   // 7. Execute transition
   if (isFundedTransition) {
     await executeFundedTransition(
-      conn, env, operator, kubeAccess, namespace,
+      conn, config, env, operator, kubeAccess, namespace,
       account, challenge, transition, bypassFees, hasOTP, accountDisplay
     );
   } else {
     await executePhaseTransition(
-      conn, env, operator, kubeAccess, namespace,
+      conn, config, env, operator, kubeAccess, namespace,
       account, challenge, transition, accountDisplay
     );
   }
@@ -157,6 +158,7 @@ export async function forcePhaseTransition(
 
 async function executePhaseTransition(
   conn: any,
+  config: Config,
   env: Environment,
   operator: string,
   kubeAccess: any,
@@ -189,6 +191,7 @@ async function executePhaseTransition(
   }
 
   ui.success(`Compte marque comme reussi (success=1, reason=${REASONS.CHALLENGE_SUCCEED}).`);
+  await awardForcedPhaseXp(conn, config, env, operator, account, challenge.type);
 
   // Step 2: Call TAM to create next phase account
   ui.sectionHeader("Etape 2 — Creation du compte Phase suivante via TAM");
@@ -260,6 +263,7 @@ async function executePhaseTransition(
 
 async function executeFundedTransition(
   conn: any,
+  config: Config,
   env: Environment,
   operator: string,
   kubeAccess: any,
@@ -310,6 +314,7 @@ async function executeFundedTransition(
     ui.info("Reponse du watcher :");
     console.log(simulateResult.logs);
   }
+  await awardForcedPhaseXp(conn, config, env, operator, account, challenge.type);
 
   // Step 2: Process funded activation only if bypass requested.
   // Otherwise the pending funded_activation row (149.90 EUR) follows the normal
