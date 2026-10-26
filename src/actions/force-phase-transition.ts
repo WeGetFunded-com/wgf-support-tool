@@ -12,6 +12,7 @@ import * as ui from "../ui.js";
 import { searchTradingAccountPrompt, confirmProductionAction } from "../utils/prompts.js";
 import { renderKeyValue } from "../utils/table.js";
 import { awardForcedPhaseXp } from "../utils/phase-xp.js";
+import { grantForcedOtpFunded } from "../utils/forced-funded.js";
 import { formatPhase, formatChallengeName, formatSuccess } from "../utils/format.js";
 import { runJob, getKubeAccess, generateJobName } from "../kube/index.js";
 import type { KubeJobSpec } from "../kube/index.js";
@@ -315,6 +316,8 @@ async function executeFundedTransition(
     console.log(simulateResult.logs);
   }
   await awardForcedPhaseXp(conn, config, env, operator, account, challenge.type);
+  // The watcher gives these when a One Time Payment challenge passes by trading; its simulate path gives none.
+  if (hasOTP) await grantForcedOtpFunded(conn, config, env, operator, account);
 
   // Step 2: Process funded activation only if bypass requested.
   // Otherwise the pending funded_activation row (149.90 EUR) follows the normal
