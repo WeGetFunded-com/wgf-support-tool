@@ -11,6 +11,7 @@ import { promoUsageAnalysis } from "./promo-usage-analysis.js";
 import { affiliationReport } from "./affiliation-report.js";
 import { weGetCoinReport } from "./wegetcoin-report.js";
 import { xpReport } from "./xp-report.js";
+import { certificatesReport } from "./certificates-report.js";
 import * as ui from "../ui.js";
 
 type AuditChoice =
@@ -24,6 +25,7 @@ type AuditChoice =
   | "affiliation_report"
   | "wegetcoin_report"
   | "xp_report"
+  | "certificates_report"
   | "back";
 
 export async function auditMenu(session: DatabaseSession, config: Config): Promise<void> {
@@ -44,6 +46,7 @@ export async function auditMenu(session: DatabaseSession, config: Config): Promi
         { name: "Analyse de l'affiliation", value: "affiliation_report" },
         { name: "WeGetCoins d'un utilisateur (solde et historique)", value: "wegetcoin_report" },
         { name: "Niveau et XP d'un utilisateur (journal, recompenses, bons)", value: "xp_report" },
+        { name: "Certificats d'un utilisateur (liens publics, mails, manquants)", value: "certificates_report" },
         { name: "Retour", value: "back" },
       ],
     });
@@ -81,6 +84,9 @@ export async function auditMenu(session: DatabaseSession, config: Config): Promi
           break;
         case "xp_report":
           await xpReport(session);
+          break;
+        case "certificates_report":
+          await certificatesReport(session);
           break;
       }
     } catch (err: unknown) {

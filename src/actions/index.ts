@@ -20,6 +20,7 @@ import { resetAffiliationBalance } from "./reset-affiliation-balance.js";
 import { gdprErase } from "./gdpr-erase.js";
 import { weGetCoinManage } from "./wegetcoin-manage.js";
 import { xpManage } from "./xp-manage.js";
+import { certificatesManage } from "./certificates-manage.js";
 import * as ui from "../ui.js";
 
 type ActionChoice =
@@ -42,6 +43,7 @@ type ActionChoice =
   | "gdpr_erase"
   | "wegetcoin_manage"
   | "xp_manage"
+  | "certificates_manage"
   | "back";
 
 export async function actionsMenu(session: DatabaseSession, config: Config): Promise<void> {
@@ -70,6 +72,7 @@ export async function actionsMenu(session: DatabaseSession, config: Config): Pro
         { name: "Remettre a 0 le solde d'affiliation d'un affilie", value: "reset_affiliation_balance" },
         { name: "WeGetCoins d'un utilisateur (crediter, debiter)", value: "wegetcoin_manage" },
         { name: "Niveau et XP d'un utilisateur (ajouter, retirer)", value: "xp_manage" },
+        { name: "Certificats d'un utilisateur (voir, revoquer, reemettre)", value: "certificates_manage" },
         { name: "Suppression totale RGPD (droit a l'effacement)", value: "gdpr_erase" },
         { name: "Retour", value: "back" },
       ],
@@ -132,6 +135,9 @@ export async function actionsMenu(session: DatabaseSession, config: Config): Pro
           break;
         case "xp_manage":
           await xpManage(session, config);
+          break;
+        case "certificates_manage":
+          await certificatesManage(session, config);
           break;
         case "gdpr_erase":
           await gdprErase(session);
