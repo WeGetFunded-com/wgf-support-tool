@@ -1,10 +1,10 @@
-import { input, select } from "@inquirer/prompts";
+import { input, select, Separator } from "@inquirer/prompts";
 import type { DatabaseSession } from "../db.js";
 import * as payoutQ from "../queries/payout.queries.js";
 import * as tradingAccountQ from "../queries/trading-account.queries.js";
 import * as auditLogQ from "../queries/audit-log.queries.js";
 import * as ui from "../ui.js";
-import { confirmProductionAction } from "../utils/prompts.js";
+import { confirmProductionAction, searchPayoutsByEmailPrompt } from "../utils/prompts.js";
 import { renderKeyValue } from "../utils/table.js";
 import { formatDate, formatCurrency } from "../utils/format.js";
 import { extendedDrawdownPoints } from "../utils/extended-drawdown.js";
@@ -19,7 +19,7 @@ import { decidePayout } from "../model-command-client.js";
 const FORCE_SQL = process.argv.includes("--force-sql");
 
 export async function payoutManage(session: DatabaseSession): Promise<void> {
-  const { connection: conn, env, operator } = session;
+  const { connection: conn } = session;
 
   // List pending payouts
   const payouts = await payoutQ.getPayoutsByStatus(conn, "pending");
@@ -31,6 +31,7 @@ export async function payoutManage(session: DatabaseSession): Promise<void> {
       message: "Voir les payouts d'un autre statut ?",
       choices: [
         { name: "Approved", value: "approved" },
+        { name: "Rechercher par email", value: "email" },
         { name: "Tous", value: "" },
         { name: "Non, retour", value: "back" },
       ],
@@ -38,7 +39,9 @@ export async function payoutManage(session: DatabaseSession): Promise<void> {
 
     if (viewAll === "back") return;
 
-    const allPayouts = await payoutQ.getPayoutsByStatus(conn, viewAll || undefined);
+    const allPayouts = viewAll === "email"
+      ? await searchPayoutsByEmailPrompt(conn)
+      : await payoutQ.getPayoutsByStatus(conn, viewAll || undefined);
     if (allPayouts.length === 0) {
       ui.info("Aucun payout trouve.");
       return;
@@ -46,8 +49,11 @@ export async function payoutManage(session: DatabaseSession): Promise<void> {
     return handlePayoutSelection(allPayouts, session);
   }
 
+  ui.info(`${payouts.length} demande(s) en attente, de la plus ancienne a la plus recente.`);
   return handlePayoutSelection(payouts, session);
 }
+
+const SEARCH_BY_EMAIL = -2;
 
 async function handlePayoutSelection(
   payouts: payoutQ.PayoutWithEmail[],
@@ -57,14 +63,26 @@ async function handlePayoutSelection(
 
   const selected = await select({
     message: "Selectionner une demande de payout :",
+    pageSize: 15,
     choices: [
-      ...payouts.slice(0, 15).map((p, i) => ({
-        name: `${p.email} — ${formatCurrency(p.payout_amount)} (${p.status})`,
+      ...payouts.map((p, i) => ({
+        name: `${p.email} — ${formatCurrency(p.payout_amount)} (${p.status}) — ${formatDate(p.created_at)}`,
         value: i,
       })),
+      new Separator(),
+      { name: "Rechercher par email", value: SEARCH_BY_EMAIL },
       { name: "Retour", value: -1 },
     ],
   });
+
+  if (selected === SEARCH_BY_EMAIL) {
+    const found = await searchPayoutsByEmailPrompt(conn);
+    if (found.length === 0) {
+      ui.info("Aucun payout trouve.");
+      return;
+    }
+    return handlePayoutSelection(found, session);
+  }
 
   if (selected < 0) return;
 

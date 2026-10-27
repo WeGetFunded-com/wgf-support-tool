@@ -4,6 +4,7 @@ import type { DbUser, DbTradingAccount } from "../types.js";
 import * as userQ from "../queries/user.queries.js";
 import * as taQ from "../queries/trading-account.queries.js";
 import * as baQ from "../queries/broker-account.queries.js";
+import * as payoutQ from "../queries/payout.queries.js";
 import * as ui from "../ui.js";
 import { isValidUuid } from "./uuid.js";
 import { renderTable } from "./table.js";
@@ -86,6 +87,14 @@ export async function searchUserPrompt(conn: mysql.Connection): Promise<DbUser |
   });
 
   return users[choice];
+}
+
+export async function searchPayoutsByEmailPrompt(
+  conn: mysql.Connection
+): Promise<payoutQ.PayoutWithEmail[]> {
+  const query = await input({ message: "Email (complet ou partiel) :" });
+  if (!query.trim()) return [];
+  return payoutQ.searchPayoutsByEmail(conn, query.trim());
 }
 
 export async function searchTradingAccountPrompt(

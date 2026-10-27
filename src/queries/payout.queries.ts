@@ -34,11 +34,7 @@ const PAYOUT_BROKER_COLS = `
       ba.broker_name as broker_name
 `;
 
-export async function getPayoutsByStatus(
-  conn: Conn,
-  status?: string
-): Promise<PayoutWithEmail[]> {
-  let sql = `
+const PAYOUT_LIST_SELECT = `
     SELECT
       BIN_TO_UUID(pr.payout_request_uuid) as payout_request_uuid,
       BIN_TO_UUID(pr.user_uuid) as user_uuid,
@@ -52,7 +48,13 @@ export async function getPayoutsByStatus(
     FROM payout_request pr
     JOIN user u ON pr.user_uuid = u.user_uuid
     ${PAYOUT_BROKER_JOIN}
-  `;
+`;
+
+export async function getPayoutsByStatus(
+  conn: Conn,
+  status?: string
+): Promise<PayoutWithEmail[]> {
+  let sql = PAYOUT_LIST_SELECT;
   const params: any[] = [];
 
   if (status) {
@@ -60,9 +62,23 @@ export async function getPayoutsByStatus(
     params.push(status);
   }
 
-  sql += " ORDER BY pr.created_at DESC LIMIT 50";
+  // Pending is the work queue: no cap, oldest first, so a request never drops out of reach.
+  sql += status === "pending"
+    ? " ORDER BY pr.created_at ASC"
+    : " ORDER BY pr.created_at DESC LIMIT 50";
 
   const [rows] = await conn.execute(sql, params);
+  return rows as PayoutWithEmail[];
+}
+
+export async function searchPayoutsByEmail(
+  conn: Conn,
+  email: string
+): Promise<PayoutWithEmail[]> {
+  const [rows] = await conn.execute(
+    `${PAYOUT_LIST_SELECT} WHERE u.email LIKE ? ORDER BY pr.created_at DESC LIMIT 50`,
+    [`%${email}%`]
+  );
   return rows as PayoutWithEmail[];
 }
 
