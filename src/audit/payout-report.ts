@@ -4,6 +4,7 @@ import * as payoutQ from "../queries/payout.queries.js";
 import * as ui from "../ui.js";
 import { renderTable, renderKeyValue } from "../utils/table.js";
 import { formatDate, formatCurrency } from "../utils/format.js";
+import { searchPayoutsByEmailPrompt } from "../utils/prompts.js";
 
 export async function payoutReport(session: DatabaseSession): Promise<void> {
   const { connection: conn } = session;
@@ -16,20 +17,20 @@ export async function payoutReport(session: DatabaseSession): Promise<void> {
       { name: "Approved", value: "approved" },
       { name: "Paid", value: "paid" },
       { name: "Rejected", value: "rejected" },
+      { name: "Rechercher par email", value: "email" },
     ],
   });
 
-  const payouts = await payoutQ.getPayoutsByStatus(
-    conn,
-    statusFilter || undefined
-  );
+  const payouts = statusFilter === "email"
+    ? await searchPayoutsByEmailPrompt(conn)
+    : await payoutQ.getPayoutsByStatus(conn, statusFilter || undefined);
 
   if (payouts.length === 0) {
     ui.info("Aucune demande de payout trouvee.");
     return;
   }
 
-  ui.sectionHeader(`Demandes de payout${statusFilter ? ` (${statusFilter})` : ""}`);
+  ui.sectionHeader(`Demandes de payout${statusFilter && statusFilter !== "email" ? ` (${statusFilter})` : ""}`);
 
   renderTable(
     ["Email", "Compte", "Methode", "Montant", "Profit", "Split", "Statut", "Date"],
@@ -49,8 +50,9 @@ export async function payoutReport(session: DatabaseSession): Promise<void> {
   if (payouts.length > 0) {
     const viewDetail = await select({
       message: "Voir le detail d'une demande ?",
+      pageSize: 15,
       choices: [
-        ...payouts.slice(0, 10).map((p, i) => ({
+        ...payouts.map((p, i) => ({
           name: `${p.email} - ${formatCurrency(p.payout_amount)} (${p.status})`,
           value: i,
         })),
