@@ -21,6 +21,7 @@ import { gdprErase } from "./gdpr-erase.js";
 import { weGetCoinManage } from "./wegetcoin-manage.js";
 import { xpManage } from "./xp-manage.js";
 import { certificatesManage } from "./certificates-manage.js";
+import { mysteryBoxManage } from "./mystery-box-manage.js";
 import { mt5Login } from "./mt5-login.js";
 import * as ui from "../ui.js";
 
@@ -45,6 +46,7 @@ type ActionChoice =
   | "wegetcoin_manage"
   | "xp_manage"
   | "certificates_manage"
+  | "mystery_box_manage"
   | "mt5_login"
   | "back";
 
@@ -76,6 +78,7 @@ export async function actionsMenu(session: DatabaseSession, config: Config): Pro
         { name: "WeGetCoins d'un utilisateur (crediter, debiter)", value: "wegetcoin_manage" },
         { name: "Niveau et XP d'un utilisateur (ajouter, retirer)", value: "xp_manage" },
         { name: "Certificats d'un utilisateur (voir, revoquer, reemettre)", value: "certificates_manage" },
+        { name: "Mystery Box (voir, offrir, retirer, campagne)", value: "mystery_box_manage" },
         { name: "Suppression totale RGPD (droit a l'effacement)", value: "gdpr_erase" },
         { name: "Retour", value: "back" },
       ],
@@ -141,6 +144,9 @@ export async function actionsMenu(session: DatabaseSession, config: Config): Pro
           break;
         case "certificates_manage":
           await certificatesManage(session, config);
+          break;
+        case "mystery_box_manage":
+          await mysteryBoxManage(session, config);
           break;
         case "gdpr_erase":
           await gdprErase(session);

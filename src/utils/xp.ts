@@ -30,7 +30,15 @@ const KIND_LABELS: Record<string, string> = {
 };
 
 /** Gifts the claim delivers today; the others stay to claim until their feature ships. */
-const CLAIMABLE_NOW = new Set(["wegetcoin", "legend_discount", "voucher_challenge"]);
+const CLAIMABLE_NOW = new Set([
+  "wegetcoin",
+  "legend_discount",
+  "voucher_challenge",
+  "certificate_design",
+  "card_design",
+  "avatar_skin",
+  "mystery_box",
+]);
 
 export interface XpState {
   profile: xpQ.XpProfile;
