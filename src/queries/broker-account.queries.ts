@@ -150,3 +150,14 @@ export async function updateBrokerAccountLogin(
     [newLogin, brokerAccountId]
   );
 }
+
+export async function updateBrokerAccountPassword(
+  conn: Conn,
+  brokerAccountId: string,
+  newPassword: string
+): Promise<void> {
+  await conn.execute(
+    `UPDATE broker_accounts SET password = ? WHERE id = UUID_TO_BIN(?)`,
+    [newPassword, brokerAccountId]
+  );
+}

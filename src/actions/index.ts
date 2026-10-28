@@ -18,6 +18,7 @@ import { verifyDeactivation } from "./verify-deactivation.js";
 import { forcePhaseTransition } from "./force-phase-transition.js";
 import { resetAffiliationBalance } from "./reset-affiliation-balance.js";
 import { gdprErase } from "./gdpr-erase.js";
+import { mt5Login } from "./mt5-login.js";
 import * as ui from "../ui.js";
 
 type ActionChoice =
@@ -38,6 +39,7 @@ type ActionChoice =
   | "verify_deactivation"
   | "reset_affiliation_balance"
   | "gdpr_erase"
+  | "mt5_login"
   | "back";
 
 export async function actionsMenu(session: DatabaseSession, config: Config): Promise<void> {
@@ -62,6 +64,7 @@ export async function actionsMenu(session: DatabaseSession, config: Config): Pro
         { name: "Creer un code promo", value: "create_promo" },
         { name: "Gerer les options d'un compte", value: "manage_options" },
         { name: "Mettre a jour l'identifiant broker (cTrader/MT5)", value: "update_ctrader_id" },
+        { name: "Connexion MT5 (diagnostic, reouverture, mot de passe)", value: "mt5_login" },
         { name: "Verification de la desactivation d'un compte", value: "verify_deactivation" },
         { name: "Remettre a 0 le solde d'affiliation d'un affilie", value: "reset_affiliation_balance" },
         { name: "Suppression totale RGPD (droit a l'effacement)", value: "gdpr_erase" },
@@ -123,6 +126,9 @@ export async function actionsMenu(session: DatabaseSession, config: Config): Pro
           break;
         case "gdpr_erase":
           await gdprErase(session);
+          break;
+        case "mt5_login":
+          await mt5Login(session, config);
           break;
       }
     } catch (err: unknown) {
