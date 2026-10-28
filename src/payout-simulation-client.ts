@@ -117,7 +117,7 @@ export async function simulatePayout(
   }) as Promise<SimulatedPayout>;
 }
 
-async function callInternal(
+export async function callInternal(
   config: Config,
   env: Environment,
   path: string,
