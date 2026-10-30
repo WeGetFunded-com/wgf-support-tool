@@ -8,6 +8,7 @@ import * as auditLogQ from "../queries/audit-log.queries.js";
 import * as boxQ from "../queries/mystery-box.queries.js";
 import * as userQ from "../queries/user.queries.js";
 import * as ui from "../ui.js";
+import { mysteryBoxBoost } from "./mystery-box-boost.js";
 import { searchUserPrompt, confirmProductionAction } from "../utils/prompts.js";
 import { renderKeyValue } from "../utils/table.js";
 import { formatSqlDateTime } from "../utils/format.js";
@@ -50,16 +51,18 @@ async function traderBoxes(session: DatabaseSession, config: Config): Promise<vo
   ui.info(`${user.firstname} ${user.lastname} <${user.email}>`);
   const boxes = await renderMysteryBoxes(session.connection, user);
 
-  const action = await select<"gift" | "revoke" | "back">({
+  const action = await select<"gift" | "revoke" | "boost" | "back">({
     message: "Action :",
     choices: [
       { name: "Offrir des boxes (geste du support)", value: "gift" },
       { name: "Retirer une box non ouverte", value: "revoke" },
+      { name: "Booster ses chances (invisible pour le trader)", value: "boost" },
       { name: "Retour", value: "back" },
     ],
   });
   if (action === "gift") await gift(session, config, user);
   if (action === "revoke") await revoke(session, config, user, boxes);
+  if (action === "boost") await mysteryBoxBoost(session, config, user);
 }
 
 async function boxTypePrompt(): Promise<BoxType> {

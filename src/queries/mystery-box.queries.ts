@@ -145,3 +145,73 @@ export async function getBoxOrder(conn: Conn, originRef: string): Promise<BoxOrd
       }
     : null;
 }
+
+export interface BoostRow {
+  boost_uuid: string;
+  scope: "account" | "box";
+  multiplier: number;
+  box_type: string | null;
+  guaranteed_lot_key: string | null;
+  min_rarity: string | null;
+  openings_left: number | null;
+  expires_at: Date | null;
+  extras_used_at: Date | null;
+  reason: string;
+  author: string;
+  created_at: Date;
+  revoked_at: Date | null;
+  boxes: number;
+  opened: number;
+}
+
+/** The trader's boosts, newest first, with the boxes each gave or opened. Never shown to the trader. */
+export async function listBoosts(conn: Conn, userUuid: string): Promise<BoostRow[]> {
+  const [rows] = await conn.execute(
+    `SELECT BIN_TO_UUID(bo.boost_uuid) AS boost_uuid, bo.scope, bo.multiplier, bo.box_type, bo.guaranteed_lot_key,
+            bo.min_rarity, bo.openings_left, bo.expires_at, bo.extras_used_at, bo.reason, bo.author, bo.created_at,
+            bo.revoked_at,
+            (SELECT COUNT(*) FROM mystery_box b WHERE b.boost_uuid = bo.boost_uuid) AS boxes,
+            (SELECT COUNT(*) FROM mystery_box b WHERE b.boost_uuid = bo.boost_uuid AND b.status = 'opened') AS opened
+     FROM mystery_box_boost bo
+     WHERE bo.user_uuid = UUID_TO_BIN(?)
+     ORDER BY bo.created_at DESC
+     LIMIT 20`,
+    [userUuid]
+  );
+  return (rows as BoostRow[]).map((row) => ({
+    ...row,
+    multiplier: Number(row.multiplier),
+    openings_left: row.openings_left === null ? null : Number(row.openings_left),
+    boxes: Number(row.boxes),
+    opened: Number(row.opened),
+  }));
+}
+
+/** A boost still raises chances: not revoked, not ended, openings left; a box boost lasts while its boxes are unopened. */
+export function isBoostActive(row: BoostRow, now: Date = new Date()): boolean {
+  if (row.revoked_at) return false;
+  if (row.scope === "box") return row.opened < row.boxes;
+  return (row.openings_left === null || row.openings_left > 0) && (row.expires_at === null || row.expires_at > now);
+}
+
+export interface TableLotRow {
+  lot_key: string;
+  slot: string;
+  lot_rarity: string;
+  gift_type: string;
+  weight_ppm: number;
+}
+
+/** The lots of the table in force of a range, rarest first: the choices of a guaranteed lot. */
+export async function listTableLots(conn: Conn, boxType: string): Promise<TableLotRow[]> {
+  const [rows] = await conn.execute(
+    `SELECT l.lot_key, l.slot, l.lot_rarity, l.gift_type, l.weight_ppm
+     FROM mystery_box_lot l
+     WHERE l.box_type = ?
+       AND l.table_version = (SELECT MAX(s.table_version) FROM mystery_box_slot s
+                              WHERE s.box_type = ? AND s.active_from <= UTC_TIMESTAMP(6))
+     ORDER BY FIELD(l.lot_rarity, 'legendary', 'epic', 'rare', 'uncommon', 'common'), l.weight_ppm, l.lot_key`,
+    [boxType, boxType]
+  );
+  return (rows as TableLotRow[]).map((row) => ({ ...row, weight_ppm: Number(row.weight_ppm) }));
+}

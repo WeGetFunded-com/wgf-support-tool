@@ -12,6 +12,33 @@ export interface BoxGrant {
   originRef: string;
   reason: string;
   author: string;
+  /** Raised chances for these boxes; only for a support grant, never shown to the trader. */
+  boost?: BoostRules;
+}
+
+/** A boost: the rare, epic and legendary lots weigh multiplier times more; one draw may give a lot or a rarity. */
+export interface BoostRules {
+  multiplier: number;
+  guaranteedLotKey?: string;
+  minRarity?: string;
+}
+
+/** A boost of the trader's next openings: a count, an end date or both, every range or one. */
+export interface AccountBoost extends BoostRules {
+  userUuid: string;
+  boxType?: BoxType;
+  openings?: number;
+  expiresAt?: Date;
+  reason: string;
+  author: string;
+}
+
+function boostRulesBody(rules: BoostRules): Record<string, unknown> {
+  return {
+    multiplier: rules.multiplier,
+    ...(rules.guaranteedLotKey ? { guaranteed_lot_key: rules.guaranteedLotKey } : {}),
+    ...(rules.minRarity ? { min_rarity: rules.minRarity } : {}),
+  };
 }
 
 export interface GrantedBox {
@@ -75,6 +102,7 @@ export async function grantBoxes(
           origin_ref: grant.originRef,
           reason: grant.reason,
           author: grant.author,
+          ...(grant.boost ? { boost: boostRulesBody(grant.boost) } : {}),
         });
       } catch (err) {
         result = err instanceof Error ? err : new Error(String(err));
@@ -97,6 +125,34 @@ export async function revokeBox(
   const tunnel = await openModelCommandTunnel(config, env);
   try {
     return await post<GrantedBox>(tunnel.localPort, `/boxes/${boxUuid}/revoke`, { reason, author });
+  } finally {
+    tunnel.close();
+  }
+}
+
+/** Boosts the trader's next openings; model-command ends the account boost in place. */
+export async function createAccountBoost(config: Config, env: Environment, boost: AccountBoost): Promise<{ boost_uuid: string }> {
+  const tunnel = await openModelCommandTunnel(config, env);
+  try {
+    return await post<{ boost_uuid: string }>(tunnel.localPort, "/box-boosts", {
+      user_uuid: boost.userUuid,
+      ...boostRulesBody(boost),
+      ...(boost.boxType ? { box_type: boost.boxType } : {}),
+      ...(boost.openings ? { openings: boost.openings } : {}),
+      ...(boost.expiresAt ? { expires_at: boost.expiresAt.toISOString() } : {}),
+      reason: boost.reason,
+      author: boost.author,
+    });
+  } finally {
+    tunnel.close();
+  }
+}
+
+/** Ends a boost before its term. */
+export async function revokeBoost(config: Config, env: Environment, boostUuid: string, author: string): Promise<void> {
+  const tunnel = await openModelCommandTunnel(config, env);
+  try {
+    await post(tunnel.localPort, `/box-boosts/${boostUuid}/revoke`, { author });
   } finally {
     tunnel.close();
   }
