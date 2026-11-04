@@ -23,6 +23,7 @@ import { xpManage } from "./xp-manage.js";
 import { certificatesManage } from "./certificates-manage.js";
 import { mysteryBoxManage } from "./mystery-box-manage.js";
 import { mt5Login } from "./mt5-login.js";
+import { boostsManage } from "./boosts-manage.js";
 import * as ui from "../ui.js";
 
 type ActionChoice =
@@ -48,6 +49,7 @@ type ActionChoice =
   | "certificates_manage"
   | "mystery_box_manage"
   | "mt5_login"
+  | "boosts_manage"
   | "back";
 
 export async function actionsMenu(session: DatabaseSession, config: Config): Promise<void> {
@@ -79,6 +81,7 @@ export async function actionsMenu(session: DatabaseSession, config: Config): Pro
         { name: "Niveau et XP d'un utilisateur (ajouter, retirer)", value: "xp_manage" },
         { name: "Certificats d'un utilisateur (voir, revoquer, reemettre)", value: "certificates_manage" },
         { name: "Mystery Box (voir, offrir, retirer, campagne)", value: "mystery_box_manage" },
+        { name: "Boosts (marquer rembourse, grille des prix)", value: "boosts_manage" },
         { name: "Suppression totale RGPD (droit a l'effacement)", value: "gdpr_erase" },
         { name: "Retour", value: "back" },
       ],
@@ -153,6 +156,9 @@ export async function actionsMenu(session: DatabaseSession, config: Config): Pro
           break;
         case "mt5_login":
           await mt5Login(session, config);
+          break;
+        case "boosts_manage":
+          await boostsManage(session, config);
           break;
       }
     } catch (err: unknown) {

@@ -13,6 +13,7 @@ import { weGetCoinReport } from "./wegetcoin-report.js";
 import { xpReport } from "./xp-report.js";
 import { certificatesReport } from "./certificates-report.js";
 import { mysteryBoxReport } from "./mystery-box-report.js";
+import { boostsReport } from "./boosts-report.js";
 import * as ui from "../ui.js";
 
 type AuditChoice =
@@ -28,6 +29,7 @@ type AuditChoice =
   | "xp_report"
   | "certificates_report"
   | "mystery_box_report"
+  | "boosts_report"
   | "back";
 
 export async function auditMenu(session: DatabaseSession, config: Config): Promise<void> {
@@ -50,6 +52,7 @@ export async function auditMenu(session: DatabaseSession, config: Config): Promi
         { name: "Niveau et XP d'un utilisateur (journal, recompenses, bons)", value: "xp_report" },
         { name: "Certificats d'un utilisateur (liens publics, mails, manquants)", value: "certificates_report" },
         { name: "Mystery Box d'un utilisateur (boxes, ouvertures, bons)", value: "mystery_box_report" },
+        { name: "Boosts (par client avec couverture possible, pending)", value: "boosts_report" },
         { name: "Retour", value: "back" },
       ],
     });
@@ -93,6 +96,9 @@ export async function auditMenu(session: DatabaseSession, config: Config): Promi
           break;
         case "mystery_box_report":
           await mysteryBoxReport(session);
+          break;
+        case "boosts_report":
+          await boostsReport(session);
           break;
       }
     } catch (err: unknown) {
