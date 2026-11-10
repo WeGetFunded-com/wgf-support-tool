@@ -44,3 +44,17 @@ export async function getBackToFundedByAccount(
   const arr = rows as DbBackToFunded[];
   return arr[0] ?? null;
 }
+
+/** Closes the pending offer of an account that support reactivates instead. */
+export async function expirePendingBackToFunded(
+  conn: Conn,
+  breachedAccountUuid: string
+): Promise<number> {
+  const [result] = await conn.execute(
+    `UPDATE back_to_funded
+     SET status = 'expired'
+     WHERE breached_account_uuid = UUID_TO_BIN(?) AND status = 'pending'`,
+    [breachedAccountUuid]
+  );
+  return (result as mysql.ResultSetHeader).affectedRows;
+}

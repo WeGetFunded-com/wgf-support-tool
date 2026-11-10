@@ -173,7 +173,8 @@ export async function reactivateAccount(
   profitTarget?: number,
   newPhaseEnd?: string
 ): Promise<void> {
-  const sets = ["success = NULL", "reason = ?"];
+  // inactivity_reset_at restarts the watcher's 30-day inactivity count.
+  const sets = ["success = NULL", "reason = ?", "inactivity_reset_at = NOW()"];
   const params: (string | number)[] = [reason];
   if (profitTarget !== undefined) {
     sets.push("current_profit_target_percent = ?");

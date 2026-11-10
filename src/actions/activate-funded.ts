@@ -99,7 +99,7 @@ export async function activateFunded(
   if (isUnlimited) {
     console.log("");
     ui.info(
-      "Ce compte unlimited necessite 149.90 EUR de frais d'activation " +
+      "Ce compte unlimited necessite 199 EUR de frais d'activation " +
       "pour passer en funded."
     );
 
@@ -242,7 +242,7 @@ export async function activateFunded(
   if (isUnlimited && !bypassFees) {
     renderKeyValue({
       "Resultat": "Funded activation creee (en attente de paiement)",
-      "Montant": "149.90 EUR",
+      "Montant": "199 EUR",
       "Action requise": "Le trader doit payer via le lien de paiement envoye par email",
       "Alternative": "Utilisez 'Bypass des frais d'activation' pour bypasser le paiement",
     });
@@ -254,7 +254,7 @@ export async function activateFunded(
   } else {
     renderKeyValue({
       "Resultat": "Funded activation creee (en attente de paiement)",
-      "Montant": "149.90 EUR",
+      "Montant": "199 EUR",
       "Action requise": "Le trader doit payer via le lien de paiement envoye par email",
       "Alternative": "Utilisez 'Bypass des frais d'activation' pour bypasser le paiement",
     });

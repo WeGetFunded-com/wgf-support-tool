@@ -140,7 +140,7 @@ Tu as acces a des donnees brutes d'un compte de trading desactive.
 - standard : 2 phases (Phase 1 → Phase 2 → Funded Standard)
   - Phase 1 : DDJ 5%, DDMax 10%, Profit Target 8%, Min 5 jours
   - Phase 2 : DDJ 5%, DDMax 10%, Profit Target 5%, Min 5 jours
-- unlimited : 1 phase (Phase 0 → payment 149.90€ → Funded Unlimited)
+- unlimited : 1 phase (Phase 0 → payment 199€ → Funded Unlimited)
   - Phase 0 : DDJ 4%, pas de DDMax, Profit Target 10%, Min 5 jours
 - instant_funded : directement en phase funded (Phase 3)
   - Phase 3 : DDJ 3%, DDMax 5%, pas de profit target

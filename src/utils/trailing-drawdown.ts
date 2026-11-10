@@ -1,3 +1,4 @@
+import type { Environment } from "../config.js";
 import type { DbChallenge, DbChallengeRule, DbTradeHistory, DbTradingAccount, DbOption } from "../types.js";
 import { formatCurrency, formatDate } from "./format.js";
 import { extendedDrawdownPoints, isExtendedDrawdownActive } from "./extended-drawdown.js";
@@ -11,6 +12,15 @@ const TRAILING_TYPES: ReadonlySet<string> = new Set(["unlimited", "funded_unlimi
 // whose phase started strictly after it are on the trailing rule; the ones
 // started before keep the fixed daily drawdown.
 export const TRAILING_DRAWDOWN_CUTOFF = new Date("2026-02-18T00:00:00.000Z");
+
+// Mirror of WGF_TRAILING_BALANCE_START (watcher + manager configmaps of each
+// namespace): from this instant the 1 Step trailing follows the EOD balance with
+// no cap at the initial capital. null = legacy rule.
+// Production: set to the release instant at the MEP of feat/rules-update.
+export const TRAILING_BALANCE_START: Record<Environment, Date | null> = {
+  staging: new Date("2026-11-10T00:00:00.000Z"),
+  production: null,
+};
 
 // isTrailingDrawdownAccount replays the watcher's isTrailingDrawdownAccount:
 // the type alone is not enough, the phase must also have started after the
@@ -29,8 +39,12 @@ export interface TrailingDrawdownVerdict {
   effectivePercent: number;
   allowedAmount: number;
   floor: number;
-  // Locked at the initial deposit once a payout reset the drawdown.
+  // Locked at the initial deposit once a payout reset the drawdown (legacy rule).
   lockedByPayout: boolean;
+  // "balance" once the EOD balance rule applies (TRAILING_BALANCE_START).
+  rule: "legacy" | "balance";
+  // Balance right after the payout, base of the floor under the balance rule.
+  postPayoutBalance: number | null;
   lastEquity: number;
   lastEquityAt: Date;
   // Positive when the floor was crossed (trailing rule is strict: equity < floor),
@@ -40,9 +54,15 @@ export interface TrailingDrawdownVerdict {
 }
 
 // computeTrailingDrawdownVerdict replays the watcher's trailing drawdown on the
-// EOD history: floor = min(HWM - deposit x (rule % + Extended Drawdown points),
-// deposit), monotone increasing, computed on completed days only. The last
-// equity of the deactivation day is then compared to it.
+// EOD history, computed on completed days only, monotone increasing:
+//   - legacy rule (days before TRAILING_BALANCE_START): floor = min(HWM equity -
+//     deposit x (rule % + Extended Drawdown points), deposit), locked at the
+//     deposit after a payout;
+//   - balance rule (days from TRAILING_BALANCE_START): floor = HWM balance - the
+//     same amount, no cap; seeded with the last balance before the switch; a
+//     payout made under it restarts from the balance right after the payout
+//     (postPayoutBalance), never below the deposit.
+// The last equity of the deactivation day is then compared to it.
 //
 // Returns null when the account is not on the trailing rule or when there is no
 // entry on the deactivation day, so callers stay silent rather than show a
@@ -52,8 +72,10 @@ export function computeTrailingDrawdownVerdict(
   rules: Pick<DbChallengeRule, "max_daily_drawdown_percent"> | null,
   account: Pick<DbTradingAccount, "challenge_phase_begin" | "drawdown_reset_at">,
   options: Pick<DbOption, "name">[],
-  eodHistory: Pick<DbTradeHistory, "pull_date" | "equity">[],
-  dayHistory: Pick<DbTradeHistory, "pull_date" | "equity">[]
+  eodHistory: Pick<DbTradeHistory, "pull_date" | "equity" | "balance">[],
+  dayHistory: Pick<DbTradeHistory, "pull_date" | "equity">[],
+  postPayoutBalance: number | null = null,
+  balanceStart: Date | null = null
 ): TrailingDrawdownVerdict | null {
   if (!challenge || !rules || rules.max_daily_drawdown_percent == null) return null;
   if (!isTrailingDrawdownAccount(challenge, account)) return null;
@@ -72,16 +94,35 @@ export function computeTrailingDrawdownVerdict(
   const initialDeposit = Number(challenge.initial_coins_amount);
   const allowedAmount = initialDeposit * effectivePercent;
   const resetAt = account.drawdown_reset_at ? new Date(account.drawdown_reset_at) : null;
-  const lockedByPayout = resetAt != null;
+  const inBalanceRule = (date: Date | string): boolean =>
+    balanceStart != null && new Date(date) >= balanceStart;
 
-  let hwm = initialDeposit;
-  let hwmAt: Date | null = null;
-  // Post-payout the floor is locked at the initial capital: no buffer below it.
-  let floor = lockedByPayout ? initialDeposit : initialDeposit - allowedAmount;
+  let equityHwm = initialDeposit;
+  let equityHwmAt: Date | null = null;
+  // Post-payout the floor never goes below the initial capital.
+  let floor = resetAt ? initialDeposit : initialDeposit - allowedAmount;
+
+  let balanceHwm = 0;
+  let balanceHwmAt: Date | null = null;
+  let balanceSeeded = false;
+  const raiseWithBalance = (balance: number, at: Date | null): void => {
+    if (!balanceSeeded || balance > balanceHwm) {
+      balanceHwm = balance;
+      balanceHwmAt = at;
+    }
+    balanceSeeded = true;
+    if (balanceHwm - allowedAmount > floor) floor = balanceHwm - allowedAmount;
+  };
+
+  const payoutUnderBalanceRule = resetAt != null && inBalanceRule(resetAt);
+  if (payoutUnderBalanceRule && postPayoutBalance != null) {
+    raiseWithBalance(postPayoutBalance, resetAt);
+  }
 
   const sortedEod = [...eodHistory].sort(
     (a, b) => new Date(a.pull_date).getTime() - new Date(b.pull_date).getTime()
   );
+  let lastLegacyBalance: { value: number; at: Date } | null = null;
   for (const record of sortedEod) {
     // EOD is only valid for completed days: the deactivation day itself (and
     // anything after it) never feeds the floor that was enforced that day.
@@ -89,23 +130,35 @@ export function computeTrailingDrawdownVerdict(
     // Records prior to the last payout are rebased away.
     if (resetAt && new Date(record.pull_date) < resetAt) continue;
 
-    if (Number(record.equity) > hwm) {
-      hwm = Number(record.equity);
-      hwmAt = new Date(record.pull_date);
+    if (inBalanceRule(record.pull_date)) {
+      if (!balanceSeeded && lastLegacyBalance) {
+        raiseWithBalance(lastLegacyBalance.value, lastLegacyBalance.at);
+      }
+      raiseWithBalance(Number(record.balance), new Date(record.pull_date));
+      continue;
     }
-    const newFloor = Math.min(hwm - allowedAmount, initialDeposit);
+
+    lastLegacyBalance = { value: Number(record.balance), at: new Date(record.pull_date) };
+    if (Number(record.equity) > equityHwm) {
+      equityHwm = Number(record.equity);
+      equityHwmAt = new Date(record.pull_date);
+    }
+    const newFloor = Math.min(equityHwm - allowedAmount, initialDeposit);
     if (newFloor > floor) floor = newFloor;
   }
 
   const lastEquity = Number(last.equity);
+  const rule = balanceSeeded || payoutUnderBalanceRule ? "balance" : "legacy";
 
   return {
-    hwm,
-    hwmAt,
+    hwm: balanceSeeded ? balanceHwm : equityHwm,
+    hwmAt: balanceSeeded ? balanceHwmAt : equityHwmAt,
     effectivePercent,
     allowedAmount,
     floor,
-    lockedByPayout,
+    lockedByPayout: resetAt != null && rule === "legacy",
+    rule,
+    postPayoutBalance: payoutUnderBalanceRule ? postPayoutBalance : null,
     lastEquity,
     lastEquityAt: new Date(last.pull_date),
     margin: floor - lastEquity,
@@ -130,9 +183,12 @@ export function describeTrailingDrawdownVerdict(v: TrailingDrawdownVerdict): {
   const hwmLine = v.hwmAt
     ? `HWM ${formatCurrency(v.hwm)} a la cloture du ${formatDate(v.hwmAt)}`
     : `HWM ${formatCurrency(v.hwm)} (depot initial : aucune cloture anterieure superieure)`;
+  const base = v.rule === "balance" ? "solde" : "equity";
   const computation = v.lockedByPayout
     ? `plancher verrouille au capital initial depuis le payout = ${formatCurrency(v.floor)}`
-    : `plancher = ${formatCurrency(v.hwm)} - ${formatCurrency(v.allowedAmount)} (${pct}) = ${formatCurrency(v.floor)}`;
+    : v.postPayoutBalance != null && v.hwm - v.allowedAmount < v.floor
+      ? `plancher = capital initial (solde apres payout ${formatCurrency(v.postPayoutBalance)} - ${formatCurrency(v.allowedAmount)} passerait dessous) = ${formatCurrency(v.floor)}`
+      : `plancher = HWM ${base} ${formatCurrency(v.hwm)} - ${formatCurrency(v.allowedAmount)} (${pct}) = ${formatCurrency(v.floor)}`;
   const verdict = v.breached
     ? `equity finale ${formatCurrency(v.lastEquity)} a ${formatDate(v.lastEquityAt)}` +
       ` -> plancher franchi de ${formatCurrency(v.margin)} (desactivation justifiee)`

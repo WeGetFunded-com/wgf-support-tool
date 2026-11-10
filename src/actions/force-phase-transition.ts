@@ -76,7 +76,7 @@ export async function forcePhaseTransition(
   const isFundedTransition = FUNDED_PHASES.has(transition.nextPhase);
 
   // One Time Payment pre-pays the activation at purchase: the funded is created
-  // directly, with no funded_activation and no 149.90 EUR fee.
+  // directly, with no funded_activation and no 199 EUR fee.
   const hasOTP = isFundedTransition
     ? await optionsQ.orderHasOptionByName(conn, account.order_uuid, optionsQ.OTP_OPTION_NAME)
     : false;
@@ -95,11 +95,11 @@ export async function forcePhaseTransition(
     "Serveur cible": transition.nextServer === "live" ? "LIVE" : "Demo",
     "Type de transition": isFundedTransition ? "Funded (via simulate/funded)" : "Phase suivante (via TAM)",
     ...(isFundedTransition
-      ? { "Frais d'activation": hasOTP ? "Aucun (option One Time Payment)" : "149.90 EUR" }
+      ? { "Frais d'activation": hasOTP ? "Aucun (option One Time Payment)" : "199 EUR" }
       : {}),
   });
 
-  // 5. For funded transition without OTP: ask about the 149.90 EUR activation
+  // 5. For funded transition without OTP: ask about the 199 EUR activation
   // fee. With OTP the funded is created directly (no fee), so skip the prompt.
   let bypassFees = false;
   if (isFundedTransition && hasOTP) {
@@ -110,7 +110,7 @@ export async function forcePhaseTransition(
   } else if (isFundedTransition) {
     console.log("");
     ui.info(
-      "Le passage en funded necessite 149.90 EUR de frais d'activation."
+      "Le passage en funded necessite 199 EUR de frais d'activation."
     );
 
     const bypassChoice = await select({
@@ -320,7 +320,7 @@ async function executeFundedTransition(
   if (hasOTP) await grantForcedOtpFunded(conn, config, env, operator, account);
 
   // Step 2: Process funded activation only if bypass requested.
-  // Otherwise the pending funded_activation row (149.90 EUR) follows the normal
+  // Otherwise the pending funded_activation row (199 EUR) follows the normal
   // payment flow (email with payment link, 7 days to pay).
   if (bypassFees) {
     ui.sectionHeader("Etape 2 — Bypass des frais d'activation (order + TAM)");
@@ -399,7 +399,7 @@ async function executeFundedTransition(
   } else if (!bypassFees) {
     renderKeyValue({
       "Resultat": "Funded activation creee (en attente de paiement)",
-      "Montant": "149.90 EUR",
+      "Montant": "199 EUR",
       "Action requise": "Le trader doit payer via le lien de paiement envoye par email",
       "Alternative": "Utilisez 'Bypass des frais d'activation' pour bypasser le paiement",
     });

@@ -11,6 +11,7 @@ import { payoutManage } from "./payout-manage.js";
 import { simulatePayout } from "./simulate-payout.js";
 import { deleteSimulatedPayout } from "./delete-simulated-payout.js";
 import { reactivateAccount } from "./reactivate-account.js";
+import { reactivateInactiveAccount } from "./reactivate-inactive-account.js";
 import { createPromo } from "./create-promo.js";
 import { manageOptions } from "./manage-options.js";
 import { updateCtraderId } from "./update-ctrader-id.js";
@@ -38,6 +39,7 @@ type ActionChoice =
   | "simulate_payout"
   | "delete_simulated_payout"
   | "reactivate_account"
+  | "reactivate_inactive_account"
   | "create_promo"
   | "manage_options"
   | "update_ctrader_id"
@@ -71,6 +73,7 @@ export async function actionsMenu(session: DatabaseSession, config: Config): Pro
         { name: "Simuler un payout sur un compte", value: "simulate_payout" },
         { name: "Supprimer une demande de payout simulee", value: "delete_simulated_payout" },
         { name: "Reactiver un compte", value: "reactivate_account" },
+        { name: "Reactiver un compte inactif (30 jours)", value: "reactivate_inactive_account" },
         { name: "Creer un code promo", value: "create_promo" },
         { name: "Gerer les options d'un compte", value: "manage_options" },
         { name: "Mettre a jour l'identifiant broker (cTrader/MT5)", value: "update_ctrader_id" },
@@ -123,6 +126,9 @@ export async function actionsMenu(session: DatabaseSession, config: Config): Pro
           break;
         case "reactivate_account":
           await reactivateAccount(session);
+          break;
+        case "reactivate_inactive_account":
+          await reactivateInactiveAccount(session, config);
           break;
         case "create_promo":
           await createPromo(session);

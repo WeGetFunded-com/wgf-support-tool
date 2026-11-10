@@ -175,3 +175,26 @@ export async function getEodTradeHistory(
   );
   return rows as DbTradeHistory[];
 }
+
+// getPostPayoutBalance returns the balance of the first snapshot taken at or after
+// the payout reset (the MT5 withdrawal is debited before drawdown_reset_at is
+// written): base of the 1 Step trailing floor under the balance rule. Mirrors the
+// watcher's postPayoutBalance (24 h lookup window).
+export async function getPostPayoutBalance(
+  conn: Conn,
+  taUuid: string,
+  resetAt: Date | null
+): Promise<number | null> {
+  if (!resetAt) return null;
+  const [rows] = await conn.execute(
+    `SELECT balance
+     FROM trade_history
+     WHERE trading_account_uuid = UUID_TO_BIN(?)
+       AND pull_date >= ? AND pull_date <= DATE_ADD(?, INTERVAL 24 HOUR)
+     ORDER BY pull_date ASC
+     LIMIT 1`,
+    [taUuid, resetAt, resetAt]
+  );
+  const arr = rows as { balance: number }[];
+  return arr[0] ? Number(arr[0].balance) : null;
+}

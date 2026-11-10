@@ -37,6 +37,7 @@ export const REASONS = {
   NO_TRADE_HISTORY_ZOMBIE: "NO_TRADE_HISTORY_ZOMBIE",
   TRADER_NOT_FOUND: "TRADER_NOT_FOUND",
   LIVE_TRANSITION: "LIVE_TRANSITION",
+  INACTIVITY: "INACTIVITY",
 } as const;
 
 // ── Broker ──
@@ -304,4 +305,5 @@ export const DEACTIVATION_REASONS = [
   { value: REASONS.NO_TRADE_HISTORY_ZOMBIE, label: "Compte zombie sans historique" },
   { value: REASONS.TRADER_NOT_FOUND, label: "Trader non trouve sur cTrader" },
   { value: REASONS.LIVE_TRANSITION, label: "Transition vers compte LIVE" },
+  { value: REASONS.INACTIVITY, label: "Inactivite (30 jours sans ouvrir de position)" },
 ] as const;

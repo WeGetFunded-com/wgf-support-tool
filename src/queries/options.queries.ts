@@ -15,7 +15,7 @@ export async function getActiveOptions(conn: Conn): Promise<DbOption[]> {
 }
 
 // One Time Payment: fixed-price option that pre-pays the funded activation, so
-// passing to funded is direct (no funded_activation, no 149.90 EUR fee).
+// passing to funded is direct (no funded_activation, no 199 EUR fee).
 export const OTP_OPTION_NAME = "One Time Payment";
 
 // orderHasOptionByName reports whether an order carries a given option (read from

@@ -17,6 +17,8 @@ import {
 import { computeDailyDrawdownVerdict, describeDailyDrawdownVerdict } from "../utils/daily-drawdown.js";
 import {
   computeTrailingDrawdownVerdict, describeTrailingDrawdownVerdict, isTrailingDrawdownAccount,
+  TRAILING_BALANCE_START,
+  type TrailingDrawdownVerdict,
 } from "../utils/trailing-drawdown.js";
 import { interactiveChat, WGF_SYSTEM_PROMPT } from "../ai.js";
 
@@ -238,8 +240,12 @@ export async function deactivationAnalysis(
   // Trailing drawdown verdict, replayed from the EOD history. Without it the
   // support is left with the day entries only and computes the fixed daily
   // threshold by hand — which does not apply to these accounts.
+  const postPayoutBalance = await tradeHistoryQ.getPostPayoutBalance(
+    conn, account.trading_account_uuid, account.drawdown_reset_at
+  );
   const trailingVerdict = computeTrailingDrawdownVerdict(
-    challenge, rules, account, options, eodHistory, deactivationDayHistory
+    challenge, rules, account, options, eodHistory, deactivationDayHistory, postPayoutBalance,
+    TRAILING_BALANCE_START[session.env]
   );
   if (trailingVerdict) {
     ui.sectionHeader("Verdict trailing drawdown (HWM sur clotures)");
@@ -303,7 +309,7 @@ export async function deactivationAnalysis(
   const rawData = buildRawDataString(
     account, accountDisplay, challenge, rules, balance, firstHistory, options,
     tradeHistory, deactivationDayHistory, eodHistory, positions, positionsSummary,
-    phaseHistory, phaseDisplayMap, user, auditLogs
+    phaseHistory, phaseDisplayMap, user, auditLogs, trailingVerdict
   );
 
   await interactiveChat(
@@ -331,7 +337,8 @@ function buildRawDataString(
   phaseHistory: any[],
   phaseDisplayMap: Map<string, AccountDisplayInfo>,
   user: any,
-  auditLogs: any[]
+  auditLogs: any[],
+  trailingVerdict: TrailingDrawdownVerdict | null
 ): string {
   const sections: string[] = [];
 
@@ -429,9 +436,7 @@ ${lines.computation}
 ${lines.verdict}`);
   }
 
-  const trailingVerdict = computeTrailingDrawdownVerdict(
-    challenge, rules, account, options, eodHistory, deactivationDayHistory
-  );
+
   if (trailingVerdict && eodHistory.length > 0) {
     sections.push(`=== CLOTURES QUOTIDIENNES (base du HWM trailing) ===
 ${eodHistory.map((h) => `${formatDate(h.pull_date)} | balance=${h.balance} | equity=${h.equity}`).join("\n")}`);
