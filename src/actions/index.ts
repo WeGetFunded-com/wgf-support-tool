@@ -24,6 +24,7 @@ import { xpManage } from "./xp-manage.js";
 import { certificatesManage } from "./certificates-manage.js";
 import { mysteryBoxManage } from "./mystery-box-manage.js";
 import { mt5Login } from "./mt5-login.js";
+import { resendValidationEmail } from "./resend-validation-email.js";
 import { boostsManage } from "./boosts-manage.js";
 import * as ui from "../ui.js";
 
@@ -51,6 +52,7 @@ type ActionChoice =
   | "certificates_manage"
   | "mystery_box_manage"
   | "mt5_login"
+  | "resend_validation_email"
   | "boosts_manage"
   | "back";
 
@@ -78,6 +80,7 @@ export async function actionsMenu(session: DatabaseSession, config: Config): Pro
         { name: "Gerer les options d'un compte", value: "manage_options" },
         { name: "Mettre a jour l'identifiant broker (cTrader/MT5)", value: "update_ctrader_id" },
         { name: "Connexion MT5 (diagnostic, reouverture, mot de passe)", value: "mt5_login" },
+        { name: "Renvoyer le mail de validation d'un utilisateur", value: "resend_validation_email" },
         { name: "Verification de la desactivation d'un compte", value: "verify_deactivation" },
         { name: "Remettre a 0 le solde d'affiliation d'un affilie", value: "reset_affiliation_balance" },
         { name: "WeGetCoins d'un utilisateur (crediter, debiter)", value: "wegetcoin_manage" },
@@ -162,6 +165,9 @@ export async function actionsMenu(session: DatabaseSession, config: Config): Pro
           break;
         case "mt5_login":
           await mt5Login(session, config);
+          break;
+        case "resend_validation_email":
+          await resendValidationEmail(session, config);
           break;
         case "boosts_manage":
           await boostsManage(session, config);
