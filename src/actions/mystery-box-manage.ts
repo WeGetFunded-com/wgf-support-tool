@@ -27,8 +27,8 @@ const REASON_MAX_BYTES = 255;
 const MAX_BOXES = 100;
 
 /**
- * Shows a trader's boxes, gives boxes to a trader (support gesture) or to a list of emails (marketing campaign), or
- * takes back an unopened box before a manual refund. model-command writes the boxes; the operator and the reason are
+ * Shows a trader's boxes, gives boxes to a trader (support gesture), to a list of emails or to every registered user
+ * (marketing campaign), or takes back an unopened box before a manual refund. model-command writes the boxes; the operator and the reason are
  * traced in admin_audit_log.
  */
 export async function mysteryBoxManage(session: DatabaseSession, config: Config): Promise<void> {
@@ -36,7 +36,7 @@ export async function mysteryBoxManage(session: DatabaseSession, config: Config)
     message: "Mystery Box :",
     choices: [
       { name: "Un trader (voir, offrir, retirer)", value: "trader" },
-      { name: "Campagne : offrir des boxes a une liste d'emails", value: "campaign" },
+      { name: "Campagne : offrir des boxes a une liste d'emails ou a tous les inscrits", value: "campaign" },
       { name: "Retour", value: "back" },
     ],
   });
@@ -175,76 +175,153 @@ function parseEmails(raw: string): string[] {
   return [...new Set(text.split(/[\s,;]+/).map((email) => email.trim().toLowerCase()).filter(Boolean))];
 }
 
-async function campaign(session: DatabaseSession, config: Config): Promise<void> {
-  const { connection: conn, env, operator } = session;
+async function emailTargets(conn: DatabaseSession["connection"]): Promise<boxQ.CampaignTarget[]> {
   const raw = await input({
     message: "Emails separes par des virgules, ou chemin d'un fichier (un email par ligne) :",
     validate: (v) => (parseEmails(v).length > 0 ? true : "Aucun email"),
   });
   const emails = parseEmails(raw);
 
-  const found: DbUser[] = [];
+  const found: boxQ.CampaignTarget[] = [];
   const unknown: string[] = [];
   for (const email of emails) {
     const user = await userQ.getUserByEmail(conn, email);
-    if (user) found.push(user);
+    if (user) found.push({ user_uuid: user.user_uuid, email: user.email });
     else unknown.push(email);
   }
   if (unknown.length > 0) ui.error(`Emails inconnus, ignores (${unknown.length}) : ${unknown.join(", ")}`);
-  if (found.length === 0) {
+  return found;
+}
+
+// origin_ref is "<code>-<user_uuid>" and holds 60 characters.
+const CAMPAIGN_CODE = /^[a-z0-9-]{3,20}$/;
+
+async function campaignCodePrompt(): Promise<string> {
+  return (
+    await input({
+      message: "Code de campagne (ex. noel-2026). Le meme code relance la campagne sans rien donner deux fois :",
+      validate: (v) => (CAMPAIGN_CODE.test(v.trim()) ? true : "3 a 20 caracteres : minuscules, chiffres, tirets"),
+    })
+  ).trim();
+}
+
+// Grants sent at once to every registered user, and the refusals in a row that stop the run (tunnel or service down).
+const EVERYONE_CONCURRENCY = 8;
+const MAX_FAILURES_IN_A_ROW = 20;
+const PROGRESS_EVERY = 500;
+
+async function campaign(session: DatabaseSession, config: Config): Promise<void> {
+  const { connection: conn, env, operator } = session;
+  const audience = await select<"emails" | "everyone" | "back">({
+    message: "Campagne, a qui ?",
+    choices: [
+      { name: "Une liste d'emails", value: "emails" },
+      { name: "Tous les inscrits (email valide ou non)", value: "everyone" },
+      { name: "Retour", value: "back" },
+    ],
+  });
+  if (audience === "back") return;
+  const everyone = audience === "everyone";
+
+  const targets = everyone ? await boxQ.listAllUsers(conn) : await emailTargets(conn);
+  if (targets.length === 0) {
     ui.info("Aucun trader a qui offrir des boxes.");
+    return;
+  }
+
+  const code = await campaignCodePrompt();
+  const served = await boxQ.listCampaignUsers(conn, code);
+  const pending = targets.filter((target) => !served.has(target.user_uuid));
+  if (pending.length === 0) {
+    ui.info(`Campagne ${code} : les ${targets.length} trader(s) ont deja leurs boxes.`);
     return;
   }
 
   const boxType = await boxTypePrompt();
   const quantity = await quantityPrompt("Nombre de boxes par trader :");
-  const reason = await reasonPrompt("Motif de la campagne (obligatoire, le meme pour toute la liste) :");
-  // One reference per run, kept on each box: "<campaign>-<user_uuid>#i" stays within the 60 characters of origin_ref.
-  const campaignRef = randomUUID().slice(0, 8);
+  const reason = await reasonPrompt("Motif de la campagne (obligatoire, le meme pour tous) :");
 
   ui.sectionHeader("Recapitulatif");
   renderKeyValue({
-    "Traders": `${found.length} (sur ${emails.length} emails)`,
-    "Boxes": `${quantity} ${BOX_TYPE_LABELS[boxType]} chacun, ${quantity * found.length} au total`,
-    "Origine": `campagne marketing ${campaignRef}`,
-    "Ignores": unknown.length > 0 ? `${unknown.length} email(s) inconnu(s)` : "aucun",
+    "Destinataires": everyone ? `tous les inscrits : ${pending.length}` : `${pending.length} trader(s)`,
+    "Deja servis": served.size > 0 ? `${targets.length - pending.length} (campagne ${code} deja lancee), ignores` : "aucun",
+    "Boxes": `${quantity} ${BOX_TYPE_LABELS[boxType]} chacun, ${quantity * pending.length} au total`,
+    "Origine": `campagne marketing ${code}`,
+    "Prevenus": "non, la box arrive dans l'inventaire sans mail",
     "Motif": reason,
     "Auteur": operator,
   });
   const confirmed = await confirmProductionAction(
     env,
-    `Offrir ${quantity} box(es) ${BOX_TYPE_LABELS[boxType]} a ${found.length} trader(s) (campagne ${campaignRef})`
+    `Offrir ${quantity} box(es) ${BOX_TYPE_LABELS[boxType]} a ${pending.length} trader(s) (campagne ${code})`
   );
   if (!confirmed) {
     ui.info("Action annulee.");
     return;
   }
 
-  const emailOf = new Map(found.map((user) => [user.user_uuid, user.email]));
-  const grants: BoxGrant[] = found.map((user) => ({
-    userUuid: user.user_uuid,
+  const emailOf = new Map(pending.map((target) => [target.user_uuid, target.email]));
+  const grants: BoxGrant[] = pending.map((target) => ({
+    userUuid: target.user_uuid,
     boxType,
     quantity,
     origin: "marketing",
-    originRef: `${campaignRef}-${user.user_uuid}`,
+    originRef: `${code}-${target.user_uuid}`,
     reason,
     author: operator,
   }));
   let given = 0;
+  let done = 0;
+  let failuresInARow = 0;
   const failed: string[] = [];
-  await grantBoxes(config, env, grants, async (grant, result) => {
-    const email = emailOf.get(grant.userUuid) ?? grant.userUuid;
-    if (result instanceof Error) {
-      failed.push(`${email} (${refusal(result)})`);
-      return;
+  await grantBoxes(
+    config,
+    env,
+    grants,
+    async (grant, result) => {
+      done++;
+      const email = emailOf.get(grant.userUuid) ?? grant.userUuid;
+      if (result instanceof Error) {
+        failed.push(`${email} (${refusal(result)})`);
+        failuresInARow++;
+      } else {
+        failuresInARow = 0;
+        given += result.created;
+        if (!everyone) await auditGrant(session, email, grant, result.boxes.map((box) => box.box_uuid));
+      }
+      if (done % PROGRESS_EVERY === 0) ui.info(`${done} / ${grants.length} traders traites...`);
+    },
+    {
+      concurrency: everyone ? EVERYONE_CONCURRENCY : 1,
+      shouldStop: () => failuresInARow >= MAX_FAILURES_IN_A_ROW,
     }
-    await auditGrant(session, email, grant, result.boxes.map((box) => box.box_uuid));
-    given += result.created;
-  });
+  );
 
-  ui.success(`Campagne ${campaignRef} : ${given} box(es) donnee(s) a ${found.length - failed.length} trader(s).`);
-  if (failed.length > 0) ui.error(`Refuses (${failed.length}) : ${failed.join(", ")}`);
-  if (unknown.length > 0) ui.info(`Emails inconnus, non traites : ${unknown.join(", ")}`);
+  const stopped = failuresInARow >= MAX_FAILURES_IN_A_ROW;
+  if (everyone) {
+    await auditLogQ.insertAuditLog(conn, "MYSTERY_BOX_CAMPAIGN", "mystery_box", null, {
+      audience: "everyone",
+      code,
+      box_type: boxType,
+      quantity,
+      reason,
+      traders: done - failed.length,
+      boxes: given,
+      refused: failed.length,
+      stopped,
+    }, operator, env);
+  }
+
+  ui.success(`Campagne ${code} : ${given} box(es) donnee(s) a ${done - failed.length} trader(s).`);
+  if (failed.length > 0) {
+    ui.error(`Refuses (${failed.length}) : ${failed.slice(0, 20).join(", ")}${failed.length > 20 ? ", ..." : ""}`);
+  }
+  if (stopped) {
+    ui.error(`Arret apres ${MAX_FAILURES_IN_A_ROW} refus d'affilee : ${grants.length - done} trader(s) non traite(s).`);
+  }
+  if (failed.length > 0 || stopped) {
+    ui.info(`Relancer la campagne avec le meme code (${code}) : seuls les traders sans boxes seront servis.`);
+  }
 }
 
 async function revoke(session: DatabaseSession, config: Config, user: DbUser, boxes: boxQ.BoxRow[]): Promise<void> {

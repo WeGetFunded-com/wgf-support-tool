@@ -71,6 +71,28 @@ export async function listBoxes(conn: Conn, userUuid: string): Promise<BoxRow[]>
   return rows as BoxRow[];
 }
 
+export interface CampaignTarget {
+  user_uuid: string;
+  email: string;
+}
+
+/** Every registered user, validated email or not. */
+export async function listAllUsers(conn: Conn): Promise<CampaignTarget[]> {
+  const [rows] = await conn.execute(`SELECT BIN_TO_UUID(user_uuid) AS user_uuid, email FROM user ORDER BY email`);
+  return rows as CampaignTarget[];
+}
+
+/** The traders who already got the boxes of a marketing campaign, whose box origin_ref is "<code>-<user_uuid>#i". */
+export async function listCampaignUsers(conn: Conn, code: string): Promise<Set<string>> {
+  const [rows] = await conn.execute(
+    `SELECT DISTINCT BIN_TO_UUID(user_uuid) AS user_uuid
+     FROM mystery_box
+     WHERE origin = 'marketing' AND origin_ref LIKE CONCAT(?, '-%')`,
+    [code]
+  );
+  return new Set((rows as { user_uuid: string }[]).map((row) => row.user_uuid));
+}
+
 /** The lots of the trader's opened boxes, in draw order. */
 export async function listDraws(conn: Conn, userUuid: string): Promise<DrawRow[]> {
   const [rows] = await conn.execute(

@@ -79,6 +79,13 @@ async function post<T>(port: number, path: string, body: unknown): Promise<T> {
   return payload as T;
 }
 
+export interface GrantRunOptions {
+  /** Grants sent at the same time. */
+  concurrency?: number;
+  /** Checked before each grant: true leaves the remaining grants unsent. */
+  shouldStop?: () => boolean;
+}
+
 /**
  * Gives boxes through model-command, which keeps each box once per origin_ref. One tunnel for every grant: onResult
  * reports each trader as soon as it is done, a refusal never stops the others.
@@ -87,11 +94,14 @@ export async function grantBoxes(
   config: Config,
   env: Environment,
   grants: BoxGrant[],
-  onResult: (grant: BoxGrant, result: BoxGrantResult | Error) => Promise<void>
+  onResult: (grant: BoxGrant, result: BoxGrantResult | Error) => Promise<void>,
+  options: GrantRunOptions = {}
 ): Promise<void> {
   const tunnel = await openModelCommandTunnel(config, env);
-  try {
-    for (const grant of grants) {
+  let next = 0;
+  const worker = async (): Promise<void> => {
+    while (next < grants.length && !options.shouldStop?.()) {
+      const grant = grants[next++];
       let result: BoxGrantResult | Error;
       try {
         result = await post<BoxGrantResult>(tunnel.localPort, "/boxes/grant", {
@@ -109,6 +119,9 @@ export async function grantBoxes(
       }
       await onResult(grant, result);
     }
+  };
+  try {
+    await Promise.all(Array.from({ length: Math.max(1, options.concurrency ?? 1) }, worker));
   } finally {
     tunnel.close();
   }
