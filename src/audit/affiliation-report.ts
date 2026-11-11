@@ -4,7 +4,7 @@ import * as ui from "../ui.js";
 import { searchUserPrompt } from "../utils/prompts.js";
 import { renderKeyValue, renderTable } from "../utils/table.js";
 import { formatDate, formatCurrency, formatPercent, formatChallengeName } from "../utils/format.js";
-import { computeAffiliationBalance } from "../utils/commission.js";
+import { commissionBase, computeAffiliationBalance } from "../utils/commission.js";
 
 export async function affiliationReport(session: DatabaseSession): Promise<void> {
   const { connection: conn } = session;
@@ -83,8 +83,7 @@ export async function affiliationReport(session: DatabaseSession): Promise<void>
     ["Date", "Acheteur", "Challenge", "Type", "Balance", "Promo", "Reduction", "Prix paye", "Commission"],
     sales.map((s) => {
       const price = s.payment_price != null ? Number(s.payment_price) / 100 : 0;
-      const percentProfits = Number(s.percent_profits);
-      const commission = price * percentProfits;
+      const commission = commissionBase(s) * Number(s.percent_profits);
       return [
         formatDate(s.payment_date),
         s.buyer_email,

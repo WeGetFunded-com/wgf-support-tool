@@ -42,6 +42,8 @@ export interface AffiliationSaleRow {
   promo_percent: number | null;
   code: string;
   percent_profits: number;
+  legend_discount_cents: number;
+  code_discount_cents: number;
 }
 
 export async function getAffiliationCodesByOwner(
@@ -145,7 +147,9 @@ export async function getSalesByOwner(
             c.initial_coins_amount as challenge_initial_coins_amount,
             pr.code as promo_code,
             pr.percent_promo as promo_percent,
-            ac.code, ac.percent_profits
+            ac.code, ac.percent_profits,
+            COALESCE(o.legend_discount_cents, 0) as legend_discount_cents,
+            COALESCE(o.code_discount_cents, 0) as code_discount_cents
      FROM orders o
      JOIN affiliation_code ac ON ac.affiliation_code_uuid = o.affiliation_code_uuid
      JOIN user u ON u.user_uuid = o.user_uuid

@@ -5,6 +5,8 @@ export interface CommissionSale {
   payment_method: string | null;
   payment_currency: string | null;
   percent_profits: number;
+  legend_discount_cents: number;
+  code_discount_cents: number;
 }
 
 export interface SettlementAmount {
@@ -35,6 +37,18 @@ function priceInCurrencyUnits(sale: CommissionSale): number {
   const price = Number(sale.payment_price);
 
   return sale.payment_method?.toLowerCase() === "fiat" ? price / 100 : price;
+}
+
+/**
+ * The Legend discount and a code won in a box are the trader's, not the affiliate's: they are
+ * added back to a card payment, as on the site and the dashboard.
+ */
+export function commissionBase(sale: CommissionSale): number {
+  const price = priceInCurrencyUnits(sale);
+
+  if (sale.payment_method?.toLowerCase() !== "fiat") return price;
+
+  return price + (Number(sale.legend_discount_cents) + Number(sale.code_discount_cents)) / 100;
 }
 
 function toEur(amount: number, currency: string, rates: Record<string, number>): number {
@@ -72,7 +86,7 @@ export async function computeAffiliationBalance(
   );
 
   const totalCommission = paidSales.reduce((sum, sale) => {
-    const commission = priceInCurrencyUnits(sale) * Number(sale.percent_profits);
+    const commission = commissionBase(sale) * Number(sale.percent_profits);
 
     return sum + toEur(commission, currencyOf(sale.payment_currency), rates);
   }, 0);
