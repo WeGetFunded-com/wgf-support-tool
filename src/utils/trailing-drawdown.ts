@@ -19,7 +19,7 @@ export const TRAILING_DRAWDOWN_CUTOFF = new Date("2026-02-18T00:00:00.000Z");
 // Production: set to the release instant at the MEP of feat/rules-update.
 export const TRAILING_BALANCE_START: Record<Environment, Date | null> = {
   staging: new Date("2026-11-10T00:00:00.000Z"),
-  production: null,
+  production: new Date("2026-11-11T00:00:00.000Z"),
 };
 
 // isTrailingDrawdownAccount replays the watcher's isTrailingDrawdownAccount:
