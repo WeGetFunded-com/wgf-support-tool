@@ -363,6 +363,8 @@ export async function anonymize(conn: Conn, scope: GdprScope, tables: Set<string
 
   // Surface d'auth et de paiement : aucune valeur comptable, on supprime.
   await run("tokens", `DELETE FROM tokens WHERE user_uuid = UUID_TO_BIN(?)`, [scope.userUuid]);
+  if (tables.has("payment_attempt"))
+    await run("payment_attempt", `DELETE FROM payment_attempt WHERE ${PAYMENT_ATTEMPT_OF_USER}`, [scope.userUuid]);
   if (tables.has("payment_session"))
     await run("payment_session", `DELETE FROM payment_session WHERE user_uuid = UUID_TO_BIN(?)`, [scope.userUuid]);
 
