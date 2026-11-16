@@ -14,7 +14,7 @@ const TA_COLS = `
   ta.win_sum, ta.loss_sum, ta.max_trading_day,
   ta.latest_update, ta.reason,
   BIN_TO_UUID(ta.promo_uuid) as promo_uuid,
-  ta.drawdown_reset_at
+  ta.drawdown_reset_at, ta.drawdown_reset_balance
 `;
 
 export async function getTradingAccountByUuid(
@@ -141,6 +141,9 @@ export async function updateCtraderAccountId(
   );
 }
 
+// lockDrawdown is only for a manager that predates the lock (before 2026-11-16):
+// the manager now writes drawdown_reset_at before the MT5 debit of a payout and
+// drawdown_reset_balance right after it. This late lock leaves the balance unset.
 export async function lockDrawdown(
   conn: Conn,
   taUuid: string

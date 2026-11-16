@@ -64,9 +64,22 @@ export interface TrailingDrawdownVerdict {
 //     (postPayoutBalance), never below the deposit.
 // The last equity of the deactivation day is then compared to it.
 //
+// postPayoutBalance is trading_account.drawdown_reset_balance, stored by the
+// manager right after the MT5 debit (see storedPostPayoutBalance). While it is
+// missing the payout is being paid and the floor stays at the deposit.
+//
 // Returns null when the account is not on the trailing rule or when there is no
 // entry on the deactivation day, so callers stay silent rather than show a
 // verdict the watcher never computed.
+// storedPostPayoutBalance reads the balance the manager stored right after the
+// payout debit. It is never inferred from trade_history: a row dated after the
+// lock can still carry the balance of before the debit.
+export function storedPostPayoutBalance(
+  account: Pick<DbTradingAccount, "drawdown_reset_balance">
+): number | null {
+  return account.drawdown_reset_balance == null ? null : Number(account.drawdown_reset_balance);
+}
+
 export function computeTrailingDrawdownVerdict(
   challenge: Pick<DbChallenge, "type" | "initial_coins_amount"> | null,
   rules: Pick<DbChallengeRule, "max_daily_drawdown_percent"> | null,

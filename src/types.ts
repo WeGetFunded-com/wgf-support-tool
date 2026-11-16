@@ -125,6 +125,9 @@ export interface DbTradingAccount {
   reason: string;
   promo_uuid: string | null;
   drawdown_reset_at: Date | null;
+  // Balance right after the debit of the payout that set drawdown_reset_at; the
+  // 1 Step trailing restarts from it. NULL while that payout is being paid.
+  drawdown_reset_balance: string | number | null;
 }
 
 export interface DbTradingAccountBalance {

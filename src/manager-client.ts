@@ -22,6 +22,11 @@ export interface SettlePayoutResult {
   debitedAmount?: number;
   validatedAt?: string;
   alreadySettled?: boolean;
+  // Written by the manager around the MT5 debit: the drawdown lock before it, the
+  // balance read right after it (base of the 1 Step trailing). Both absent with a
+  // manager that predates the lock; balanceAfter alone absent when it could not be stored.
+  drawdownLockedAt?: string;
+  balanceAfter?: number;
   weGetCoins?: WeGetCoinPayoutCredit;
 }
 

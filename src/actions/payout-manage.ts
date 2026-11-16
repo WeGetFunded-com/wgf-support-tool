@@ -276,19 +276,33 @@ async function handlePayoutSelection(
       }, operator, env);
     }
 
+    // The manager locks the drawdown before the MT5 debit and stores the balance
+    // right after it. Only a manager that predates this still needs the late lock.
+    const lockedByManager = paid && settlement?.drawdownLockedAt != null;
     if (paid) {
-      await tradingAccountQ.lockDrawdown(conn, payout.trading_account_uuid);
+      if (!lockedByManager) {
+        await tradingAccountQ.lockDrawdown(conn, payout.trading_account_uuid);
+      }
       await auditLogQ.insertAuditLog(conn, "PAYOUT_DRAWDOWN_RESET", "trading_account", payout.trading_account_uuid, {
         email: payout.email,
         payout_request_uuid: payout.payout_request_uuid,
         payout_amount: payout.payout_amount,
+        locked_by: lockedByManager ? "manager" : "support-shell",
+        drawdown_locked_at: settlement?.drawdownLockedAt ?? null,
+        balance_after_payout: settlement?.balanceAfter ?? null,
       }, operator, env);
     }
 
     await conn.commit();
     ui.success(`Payout mis a jour : ${changes.map((c) => c.to).join(" puis ") || action}`);
     if (paid) {
-      ui.info("Drawdown floor verrouille a l'initial_amount pour ce compte.");
+      if (!lockedByManager) {
+        ui.warn("Manager ancien : drawdown verrouille apres le debit, sans solde apres payout. Le plancher reste au capital initial tant que ce solde n'est pas renseigne ; prevenir un developpeur.");
+      } else if (settlement?.balanceAfter == null) {
+        ui.warn("Drawdown verrouille, mais le solde apres payout n'a pas pu etre enregistre : le plancher reste au capital initial. Prevenir un developpeur pour le renseigner.");
+      } else {
+        ui.info(`Drawdown verrouille avant le debit. Solde apres payout : ${formatCurrency(settlement.balanceAfter, "USD")} (le plancher repart de ce solde, jamais sous le capital initial).`);
+      }
       const accountOptions = await tradingAccountQ.getTradingAccountOptions(conn, payout.trading_account_uuid);
       const extendedPoints = extendedDrawdownPoints(accountOptions);
       if (extendedPoints > 0) {

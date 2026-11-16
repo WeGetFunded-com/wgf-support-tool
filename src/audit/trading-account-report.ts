@@ -117,7 +117,10 @@ export async function tradingAccountReport(session: DatabaseSession): Promise<vo
         "Min Trading Days": String(rules.min_trading_days),
         "Duree phase": formatDuration(rules.phase_duration),
         "Drawdown reset (payout)": account.drawdown_reset_at
-          ? `${formatDate(account.drawdown_reset_at)} (plancher verrouille au capital initial)` : "-",
+          ? `${formatDate(account.drawdown_reset_at)} (plancher jamais sous le capital initial)` : "-",
+        "Solde apres payout": account.drawdown_reset_at == null ? "-"
+          : account.drawdown_reset_balance == null ? "non renseigne (paiement en cours ou payout d'avant le 16/11/2026)"
+          : formatCurrency(Number(account.drawdown_reset_balance), "USD"),
       });
     }
   }

@@ -17,7 +17,7 @@ import {
 import { computeDailyDrawdownVerdict, describeDailyDrawdownVerdict } from "../utils/daily-drawdown.js";
 import {
   computeTrailingDrawdownVerdict, describeTrailingDrawdownVerdict, isTrailingDrawdownAccount,
-  TRAILING_BALANCE_START,
+  storedPostPayoutBalance, TRAILING_BALANCE_START,
   type TrailingDrawdownVerdict,
 } from "../utils/trailing-drawdown.js";
 import { interactiveChat, WGF_SYSTEM_PROMPT } from "../ai.js";
@@ -240,9 +240,7 @@ export async function deactivationAnalysis(
   // Trailing drawdown verdict, replayed from the EOD history. Without it the
   // support is left with the day entries only and computes the fixed daily
   // threshold by hand — which does not apply to these accounts.
-  const postPayoutBalance = await tradeHistoryQ.getPostPayoutBalance(
-    conn, account.trading_account_uuid, account.drawdown_reset_at
-  );
+  const postPayoutBalance = storedPostPayoutBalance(account);
   const trailingVerdict = computeTrailingDrawdownVerdict(
     challenge, rules, account, options, eodHistory, deactivationDayHistory, postPayoutBalance,
     TRAILING_BALANCE_START[session.env]
