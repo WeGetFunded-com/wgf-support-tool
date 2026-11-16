@@ -44,7 +44,9 @@ export function usd(cents: number | null): string {
 }
 
 /** "Funded 1 Etape 100K" or "Payout 800.00 USD". */
-export function describeCertificate(row: CertificateRow): string {
+export function describeCertificate(
+  row: Pick<CertificateRow, "type" | "challenge_type" | "account_size" | "amount_cents">
+): string {
   if (row.type === "funded") {
     const product = PRODUCT_LABELS[row.challenge_type ?? ""] ?? row.challenge_type ?? "";
     const size = row.account_size ? `${row.account_size % 1000 === 0 ? `${row.account_size / 1000}K` : row.account_size}` : "";

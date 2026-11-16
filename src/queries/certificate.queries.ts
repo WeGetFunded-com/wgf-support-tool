@@ -86,3 +86,34 @@ export async function listMissingPayouts(conn: Conn, userUuid: string, since: st
   );
   return (rows as MissingPayoutRow[]).map((row) => ({ ...row, payout_amount: Number(row.payout_amount) }));
 }
+
+/** An active Funded or Payout certificate issued in a period, with the name printed on it. */
+export interface IssuedCertificateRow {
+  public_id: string;
+  type: "funded" | "payout";
+  challenge_type: string | null;
+  account_size: number | null;
+  amount_cents: number | null;
+  holder_firstname: string;
+  holder_lastname: string;
+  name_masked: boolean;
+  issued_at: Date;
+}
+
+export async function listIssuedCertificates(conn: Conn, from: string, to: string): Promise<IssuedCertificateRow[]> {
+  const [rows] = await conn.execute(
+    `SELECT public_id, type, challenge_type, account_size, amount_cents, holder_firstname, holder_lastname,
+            name_masked, issued_at
+     FROM certificate
+     WHERE status = 'active' AND type IN ('funded', 'payout') AND issued_at >= ? AND issued_at < ?
+     ORDER BY issued_at DESC
+     LIMIT 1000`,
+    [from, to]
+  );
+  return (rows as IssuedCertificateRow[]).map((row) => ({
+    ...row,
+    account_size: row.account_size == null ? null : Number(row.account_size),
+    amount_cents: row.amount_cents == null ? null : Number(row.amount_cents),
+    name_masked: Boolean(Number(row.name_masked)),
+  }));
+}
