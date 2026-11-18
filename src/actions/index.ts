@@ -6,6 +6,7 @@ import { fixProfitTarget } from "./fix-profit-target.js";
 import { activateFunded } from "./activate-funded.js";
 import { bypassActivationFees } from "./bypass-activation-fees.js";
 import { processBackToFunded } from "./process-back-to-funded.js";
+import { reopenExpiredBackToFunded, reopenExpiredFundedActivation } from "./reopen-expired-offer.js";
 import { deactivateAccount } from "./deactivate-account.js";
 import { payoutManage } from "./payout-manage.js";
 import { simulatePayout } from "./simulate-payout.js";
@@ -34,6 +35,8 @@ type ActionChoice =
   | "activate_funded"
   | "bypass_activation_fees"
   | "process_back_to_funded"
+  | "reopen_back_to_funded"
+  | "reopen_funded_activation"
   | "force_phase_transition"
   | "deactivate_account"
   | "payout_manage"
@@ -69,6 +72,8 @@ export async function actionsMenu(session: DatabaseSession, config: Config): Pro
         { name: "Activation d'un Funded depuis un compte existant", value: "activate_funded" },
         { name: "Bypass des frais d'activation", value: "bypass_activation_fees" },
         { name: "Traiter une offre Back to Funded (bypass paiement)", value: "process_back_to_funded" },
+        { name: "Rouvrir une offre Back to Funded expiree (+7 jours)", value: "reopen_back_to_funded" },
+        { name: "Rouvrir une activation funded expiree (+7 jours)", value: "reopen_funded_activation" },
         { name: "Forcer le passage de phase", value: "force_phase_transition" },
         { name: "Desactiver un compte de trading", value: "deactivate_account" },
         { name: "Gerer une demande de payout", value: "payout_manage" },
@@ -111,6 +116,12 @@ export async function actionsMenu(session: DatabaseSession, config: Config): Pro
           break;
         case "process_back_to_funded":
           await processBackToFunded(session, config);
+          break;
+        case "reopen_back_to_funded":
+          await reopenExpiredBackToFunded(session);
+          break;
+        case "reopen_funded_activation":
+          await reopenExpiredFundedActivation(session);
           break;
         case "force_phase_transition":
           await forcePhaseTransition(session, config);

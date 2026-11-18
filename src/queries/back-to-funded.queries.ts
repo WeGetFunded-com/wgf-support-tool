@@ -58,3 +58,18 @@ export async function expirePendingBackToFunded(
   );
   return (result as mysql.ResultSetHeader).affectedRows;
 }
+
+/** Reopens an expired offer until newExpiresAt; the trader pays from the dashboard. */
+export async function reopenExpiredBackToFunded(
+  conn: Conn,
+  offerUuid: string,
+  newExpiresAt: string
+): Promise<number> {
+  const [result] = await conn.execute(
+    `UPDATE back_to_funded
+     SET status = 'pending', expires_at = ?, payment_link = NULL, geidea_invoice_id = NULL
+     WHERE offer_uuid = UUID_TO_BIN(?) AND status = 'expired'`,
+    [newExpiresAt, offerUuid]
+  );
+  return (result as mysql.ResultSetHeader).affectedRows;
+}

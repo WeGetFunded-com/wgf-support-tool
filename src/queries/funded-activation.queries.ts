@@ -56,3 +56,18 @@ export async function markFundedActivationPaid(
     [activationUuid]
   );
 }
+
+/** Reopens an expired activation until newExpiresAt; the trader pays from the dashboard. */
+export async function reopenExpiredFundedActivation(
+  conn: Conn,
+  activationUuid: string,
+  newExpiresAt: string
+): Promise<number> {
+  const [result] = await conn.execute(
+    `UPDATE funded_activation
+     SET status = 'pending', expires_at = ?, payment_link = NULL, geidea_invoice_id = NULL
+     WHERE activation_uuid = UUID_TO_BIN(?) AND status = 'expired'`,
+    [newExpiresAt, activationUuid]
+  );
+  return (result as mysql.ResultSetHeader).affectedRows;
+}
