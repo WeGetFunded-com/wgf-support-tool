@@ -87,6 +87,15 @@ export async function openModelCommandTunnel(
   );
 }
 
+export async function openAuthTunnel(
+  config: Config,
+  env: Environment
+): Promise<Tunnel> {
+  const envConfig = getEnvConfig(config, env);
+
+  return forward(config, env, `svc/${envConfig.authService}`, envConfig.authPort, "tunnel vers le service auth");
+}
+
 async function forward(
   config: Config,
   env: Environment,

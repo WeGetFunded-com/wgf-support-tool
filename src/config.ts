@@ -19,6 +19,8 @@ export interface Config {
     managerPort: number;
     modelCommandService: string;
     modelCommandPort: number;
+    authService: string;
+    authPort: number;
     database: string;
     user: string;
     password: string;
@@ -31,6 +33,8 @@ export interface Config {
     managerPort: number;
     modelCommandService: string;
     modelCommandPort: number;
+    authService: string;
+    authPort: number;
     database: string;
     user: string;
     password: string;
@@ -87,6 +91,8 @@ export function loadConfig(): Config {
       managerPort: parseInt(parsed["STAGING_MANAGER_PORT"] || "80", 10),
       modelCommandService: parsed["STAGING_MODEL_COMMAND_SERVICE"] || "staging-model-command",
       modelCommandPort: parseInt(parsed["STAGING_MODEL_COMMAND_PORT"] || "80", 10),
+      authService: parsed["STAGING_AUTH_SERVICE"] || "staging-auth",
+      authPort: parseInt(parsed["STAGING_AUTH_PORT"] || "80", 10),
       database: parsed["STAGING_DB_NAME"],
       user: parsed["STAGING_DB_USER"],
       password: parsed["STAGING_DB_PASSWORD"],
@@ -99,6 +105,8 @@ export function loadConfig(): Config {
       managerPort: parseInt(parsed["PRODUCTION_MANAGER_PORT"] || "80", 10),
       modelCommandService: parsed["PRODUCTION_MODEL_COMMAND_SERVICE"] || "production-model-command",
       modelCommandPort: parseInt(parsed["PRODUCTION_MODEL_COMMAND_PORT"] || "80", 10),
+      authService: parsed["PRODUCTION_AUTH_SERVICE"] || "production-auth",
+      authPort: parseInt(parsed["PRODUCTION_AUTH_PORT"] || "80", 10),
       database: parsed["PRODUCTION_DB_NAME"],
       user: parsed["PRODUCTION_DB_USER"],
       password: parsed["PRODUCTION_DB_PASSWORD"],
